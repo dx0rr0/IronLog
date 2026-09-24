@@ -1,0 +1,31 @@
+{
+  "name": "ironlog",
+  "private": true,
+  "version": "1.4.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "icons": "python3 scripts/make-icons.py",
+    "test:logic": "node scripts/test-storage.mjs && node scripts/test-storage-errors.mjs && node scripts/test-exercise-utils.mjs && node scripts/test-volume.mjs && node scripts/test-session-utils.mjs && node scripts/test-workout-intelligence.mjs",
+    "test": "node scripts/test-storage.mjs && node scripts/test-storage-errors.mjs && node scripts/test-exercise-utils.mjs && node scripts/test-volume.mjs && node scripts/test-session-utils.mjs && node scripts/test-workout-intelligence.mjs && node scripts/test-bundle.mjs && node scripts/test-runtime.mjs && node scripts/test-archive-runtime.mjs && node scripts/test-workout-flow-runtime.mjs"
+  },
+  "dependencies": {
+    "lucide-react": "^0.383.0",
+    "react": "^18.3.1",
+    "react-body-highlighter": "^2.0.5",
+    "react-dom": "^18.3.1",
+    "recharts": "^2.12.7"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^4.3.1",
+    "autoprefixer": "^10.4.19",
+    "fake-indexeddb": "^6.0.0",
+    "jsdom": "^25.0.0",
+    "postcss": "^8.4.39",
+    "tailwindcss": "^3.4.4",
+    "vite": "^5.3.3",
+    "vite-plugin-pwa": "^0.20.0"
+  }
+}
