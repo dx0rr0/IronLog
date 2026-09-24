@@ -1,4 +1,4 @@
-import { inheritSet } from './exercise-utils.js';
+import { inheritSet } from '../exercises/exercise-utils.js';
 import { completedSets, sessionVolume } from './session-utils.js';
 
 const positive = value => Number.isFinite(Number(value)) && Number(value) > 0

@@ -1,5 +1,5 @@
 // Run separately from the IndexedDB smoke test to exercise the fallback path.
-import { storage } from '../src/lib/storage.js';
+import { storage } from '../src/infrastructure/storage/storage.js';
 
 globalThis.localStorage = {
   getItem() { throw new Error('read blocked'); },

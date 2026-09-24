@@ -1,4 +1,4 @@
-// Tests for src/lib/volume.js
+// Tests for src/domain/training/volume.js
 import {
   PRIMARY_MUSCLE_GROUPS,
   VOLUME_WINDOWS,
@@ -7,7 +7,7 @@ import {
   sessionInWindow,
   isSameIsoWeek,
   computeVolumeBreakdown,
-} from '../src/lib/volume.js';
+} from '../src/domain/training/volume.js';
 
 let pass = 0, fail = 0;
 function ok(name, cond, extra) {

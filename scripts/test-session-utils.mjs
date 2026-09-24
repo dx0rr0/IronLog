@@ -1,4 +1,4 @@
-import { completedSets, hasCompletedSet, sessionVolume } from '../src/lib/session-utils.js';
+import { completedSets, hasCompletedSet, sessionVolume } from '../src/domain/training/session-utils.js';
 
 let pass = 0;
 function ok(name, condition) {

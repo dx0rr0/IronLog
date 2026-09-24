@@ -4,7 +4,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { JSDOM } from 'jsdom';
 import 'fake-indexeddb/auto';
-import { storage } from '../src/lib/storage.js';
+import { storage } from '../src/infrastructure/storage/storage.js';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const assets = path.join(root, 'dist', 'assets');

@@ -5,7 +5,7 @@
 
 import React, { useMemo } from 'react';
 import Model from 'react-body-highlighter';
-import { volumeLevel } from '../lib/volume.js';
+import { volumeLevel } from '../../domain/training/volume.js';
 
 // Map IronLog group → list of library muscle slugs that compose it.
 // The library is fine-grained (e.g. it splits trapezius from upper-back);

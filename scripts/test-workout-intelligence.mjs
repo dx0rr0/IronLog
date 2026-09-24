@@ -1,6 +1,6 @@
 import fs from 'node:fs';
-import { CATALOG_ADDITIONS } from '../src/lib/catalog-additions.js';
-import { exerciseComparisons, predictGhost, repeatSession, summarizeSession } from '../src/lib/workout-intelligence.js';
+import { CATALOG_ADDITIONS } from '../src/domain/exercises/catalog-additions.js';
+import { exerciseComparisons, predictGhost, repeatSession, summarizeSession } from '../src/domain/training/workout-intelligence.js';
 
 let pass = 0;
 function ok(name, condition) {
@@ -68,7 +68,7 @@ ok('summary includes same-routine comparison', summary.rows[0].before.weight ===
   summary.rows[0].scope === 'rutina');
 
 const ids = CATALOG_ADDITIONS.map(item => item.id);
-const originalSource = fs.readFileSync(new URL('../src/App.jsx', import.meta.url), 'utf8');
+const originalSource = fs.readFileSync(new URL('../src/domain/exercises/catalog.js', import.meta.url), 'utf8');
 const originalIds = [...originalSource.matchAll(/\{ id: '([^']+)', name:/g)].map(match => match[1]);
 ok('new catalogue has at least 70 additions', CATALOG_ADDITIONS.length >= 70);
 ok('all catalogue IDs are unique', new Set([...originalIds, ...ids]).size === originalIds.length + ids.length);

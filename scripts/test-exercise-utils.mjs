@@ -12,7 +12,7 @@ import {
   platesSummary,
   bodyWeightDelta,
   DEFAULT_PLATE_CONFIG,
-} from '../src/lib/exercise-utils.js';
+} from '../src/domain/exercises/exercise-utils.js';
 
 let pass = 0, fail = 0;
 function ok(name, cond, extra) {

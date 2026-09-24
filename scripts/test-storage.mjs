@@ -5,7 +5,7 @@
 // then exercises set/get/delete plus a roundtrip with realistic data.
 
 import 'fake-indexeddb/auto';
-import { storage } from '../src/lib/storage.js';
+import { storage } from '../src/infrastructure/storage/storage.js';
 
 let pass = 0, fail = 0;
 function ok(name, cond, extra) {

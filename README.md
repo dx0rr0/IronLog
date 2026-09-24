@@ -2,6 +2,16 @@
 
 App personal para registrar entrenamientos: rutinas, series con RIR, autorrelleno desde la última sesión, calculadora de discos, 1RM estimado, peso corporal, descansos, progreso y calendario. Funciona offline en el móvil como PWA, los datos se guardan en tu propio dispositivo.
 
+## Estructura del proyecto
+
+- `src/app/`: arranque y coordinación del estado de la aplicación.
+- `src/domain/`: catálogo, cálculos y reglas de entrenamiento, sin interfaz ni acceso al almacenamiento.
+- `src/infrastructure/`: almacenamiento local y persistencia.
+- `src/presentation/features/`: pantallas organizadas por función; `src/presentation/shared/` contiene componentes reutilizables.
+- `public/`: iconos y archivos estáticos; `scripts/`: pruebas y utilidades de desarrollo.
+
+Consulta [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) para las dependencias entre capas y el flujo de datos. `dist/` y `node_modules/` son archivos generados y no se versionan.
+
 ## Cambios de la versión 1.4.0
 
 - Modo serie para centrarse en una serie, ajustar el resultado real y avanzar a la siguiente.
