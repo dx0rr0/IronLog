@@ -104,10 +104,10 @@ export function RoutinesView({ routines, exMap, onStart, onNew, onEdit, onDelete
 // ROUTINE EDITOR (create / edit)
 // ============================================================
 
-export function RoutineEditor({ initial, exercises, exMap, onSave, onCancel, showConfirm }) {
-  const [routine, setRoutine] = useState(() => initial ? {
-    ...JSON.parse(JSON.stringify(initial)),
-    exercises: availableRoutineEntries(initial, exMap),
+export function RoutineEditor({ initial, draft, exercises, exMap, onSave, onCancel, showConfirm }) {
+  const [routine, setRoutine] = useState(() => initial || draft ? {
+    ...JSON.parse(JSON.stringify(initial || draft)),
+    exercises: JSON.parse(JSON.stringify(availableRoutineEntries(initial || draft, exMap))),
   } : {
     name: '',
     notes: '',
@@ -233,6 +233,9 @@ export function RoutineEditor({ initial, exercises, exMap, onSave, onCancel, sho
       </header>
 
       <div className="p-5 space-y-4">
+        {draft && <p className="text-xs text-zinc-400 bg-zinc-900 border border-zinc-800 rounded-xl p-3">
+          Copiamos los ejercicios y las series completadas. Ajusta los objetivos de repeticiones y RIR antes de guardar; al iniciar la rutina, los pesos se sugerirán desde tu historial.
+        </p>}
         {/* Routine info */}
         <div>
           <label className="text-[10px] text-zinc-500 uppercase tracking-wider font-bold block mb-1.5">Nombre</label>

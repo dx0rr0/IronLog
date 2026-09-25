@@ -6,6 +6,7 @@ import { exerciseComparisons, predictGhost, summarizeSession } from '../../../do
 import { computePlates, epley, findLastEntryForExercise, inheritSet, platesSummary } from '../../../domain/exercises/exercise-utils.js';
 import { ArrowDown, ArrowLeft, ArrowUp, Check, ChevronDown, ChevronLeft, ChevronRight, Dumbbell, Edit2, MessageSquare, Pencil, Play, Plus, RotateCcw, Save, Search, SkipForward, Timer, Trash2, X } from 'lucide-react';
 import { completedSets, sessionVolume } from '../../../domain/training/session-utils.js';
+import { routineDraftFromSession } from '../../../domain/training/routine-from-session.js';
 import { fmtDur, formatLong, formatShort, formatTime, parseDur, sessionDuration } from '../../shared/formatters.js';
 import { MUSCLE_GROUPS, exerciseMatches } from '../../../domain/exercises/catalog.js';
 import { detectSetRecords } from '../../../domain/training/records.js';
@@ -1015,9 +1016,10 @@ export function SetRow({ idx, set, type, unit, previous, ghost, plateConfig, onU
 // SESSION DETAIL
 // ============================================================
 
-export function SessionDetail({ session, exMap, onBack, onDelete, onEdit, onRepeat, hasActive }) {
+export function SessionDetail({ session, exMap, onBack, onDelete, onEdit, onRepeat, onSaveAsRoutine, hasActive }) {
   const dur = sessionDuration(session);
   const vol = sessionVolume(session);
+  const canSaveAsRoutine = routineDraftFromSession(session, exMap).exercises.length > 0;
   return (
     <div>
       <header className="sticky top-0 bg-zinc-950/95 backdrop-blur-md border-b border-zinc-800 z-20 px-5 py-3 flex items-center gap-2">
@@ -1056,6 +1058,12 @@ export function SessionDetail({ session, exMap, onBack, onDelete, onEdit, onRepe
           <RotateCcw className="w-4 h-4" /> REPETIR ENTRENAMIENTO
         </button>
         {hasActive && <p className="text-xs text-zinc-500 -mt-3 mb-5 text-center">Termina la sesión en curso para repetir esta.</p>}
+
+        <button onClick={onSaveAsRoutine} disabled={!canSaveAsRoutine}
+          className="w-full border border-lime-300/50 text-lime-300 disabled:border-zinc-800 disabled:text-zinc-600 rounded-xl py-3 mb-5 font-bold flex items-center justify-center gap-2 hover:bg-lime-300/10 transition">
+          <Save className="w-4 h-4" /> GUARDAR COMO RUTINA
+        </button>
+        {!canSaveAsRoutine && <p className="text-xs text-zinc-500 -mt-3 mb-5 text-center">Necesitas al menos una serie completada de un ejercicio disponible.</p>}
 
         {session.notes && (
           <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-4 mb-4">

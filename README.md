@@ -12,6 +12,10 @@ App personal para registrar entrenamientos: rutinas, series con RIR, autorrellen
 
 Consulta [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) para las dependencias entre capas y el flujo de datos. `dist/` y `node_modules/` son archivos generados y no se versionan.
 
+## Cambio pendiente de despliegue
+
+- Desde el detalle de un entrenamiento pasado, **Guardar como rutina** abre una rutina nueva con los ejercicios, descansos y series completadas. Copia los rangos de repeticiones existentes o propone uno alrededor de las repeticiones realizadas; el RIR real queda como objetivo editable. Los pesos siguen en el historial y se sugieren al iniciar la rutina. Los ejercicios archivados no se incluyen.
+
 ## Cambios de la versión 1.5.0
 
 - Meta semanal de 1 a 7 días distintos, con elección inicial y edición posterior en Ajustes. La semana va de lunes a domingo; solo cuentan entrenamientos con series completadas.
@@ -20,7 +24,7 @@ Consulta [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) para las dependencias entr
 - Aviso animado al confirmar una serie que supera una marca anterior de peso, repeticiones con el mismo peso o 1RM estimado. También se reconocen marcas de repeticiones, duración y distancia cuando el tipo de ejercicio corresponde.
 - La meta semanal se incluye en la exportación JSON (formato v4). Las copias anteriores siguen pudiendo importarse.
 
-Esta versión está en el repositorio; se desplegará solo cuando lo solicites.
+La versión 1.5.0 ya está desplegada en Vercel. Los cambios posteriores se desplegarán solo cuando lo solicites.
 
 ## Cambios de la versión 1.4.0
 

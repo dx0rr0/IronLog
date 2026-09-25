@@ -5,6 +5,7 @@ import { storage } from '../infrastructure/storage/storage.js';
 import { dismissBackupReminder, markBackupDone, requestPersistentStorage, shouldRemindBackup } from '../infrastructure/storage/persistence.js';
 import { repeatSession } from '../domain/training/workout-intelligence.js';
 import { hasCompletedSet } from '../domain/training/session-utils.js';
+import { routineDraftFromSession } from '../domain/training/routine-from-session.js';
 import { AlertTriangle, Dumbbell, ShieldCheck, X } from 'lucide-react';
 import { DEFAULT_EXERCISES, availableRoutineEntries } from '../domain/exercises/catalog.js';
 import { dateKey } from '../presentation/shared/formatters.js';
@@ -551,6 +552,10 @@ export default function App() {
               onDelete={() => deleteSession(view.data.id)}
               onEdit={() => startEditSession(view.data)}
               onRepeat={() => startRepeatedSession(view.data)}
+              onSaveAsRoutine={() => setView({
+                kind: 'newRoutineFromSession',
+                data: { draft: routineDraftFromSession(view.data, exMap), sourceSession: view.data },
+              })}
               hasActive={!!currentSession}
             />
           ) : view?.kind === 'summary' ? (
@@ -568,13 +573,18 @@ export default function App() {
             <ExerciseDetail exercise={view.data} sessions={sessions} onBack={() => setView(null)} />
           ) : view?.kind === 'newExercise' ? (
             <NewExerciseForm onSave={ex => { addCustomExercise(ex); setView(null); }} onCancel={() => setView(null)} />
-          ) : view?.kind === 'newRoutine' || view?.kind === 'editRoutine' ? (
+          ) : ['newRoutine', 'editRoutine', 'newRoutineFromSession'].includes(view?.kind) ? (
             <RoutineEditor
               initial={view?.kind === 'editRoutine' ? view.data : null}
+              draft={view?.kind === 'newRoutineFromSession' ? view.data.draft : null}
               exercises={availableExercises}
               exMap={exMap}
-              onSave={saveRoutine}
-              onCancel={() => setView(null)}
+              onSave={routine => {
+                saveRoutine(routine);
+                if (view?.kind === 'newRoutineFromSession') setTab('routines');
+              }}
+              onCancel={() => setView(view?.kind === 'newRoutineFromSession'
+                ? { kind: 'session', data: view.data.sourceSession } : null)}
               showConfirm={showConfirm}
             />
           ) : (

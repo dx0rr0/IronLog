@@ -8,8 +8,8 @@
     "build": "vite build",
     "preview": "vite preview",
     "icons": "python3 scripts/make-icons.py",
-    "test:logic": "node scripts/test-storage.mjs && node scripts/test-storage-errors.mjs && node scripts/test-exercise-utils.mjs && node scripts/test-volume.mjs && node scripts/test-session-utils.mjs && node scripts/test-workout-intelligence.mjs && node scripts/test-motivation.mjs && node scripts/test-records.mjs",
-    "test": "node scripts/test-storage.mjs && node scripts/test-storage-errors.mjs && node scripts/test-exercise-utils.mjs && node scripts/test-volume.mjs && node scripts/test-session-utils.mjs && node scripts/test-workout-intelligence.mjs && node scripts/test-motivation.mjs && node scripts/test-records.mjs && node scripts/test-bundle.mjs && node scripts/test-runtime.mjs && node scripts/test-archive-runtime.mjs && node scripts/test-workout-flow-runtime.mjs && node scripts/test-motivation-runtime.mjs"
+    "test:logic": "node scripts/test-storage.mjs && node scripts/test-storage-errors.mjs && node scripts/test-exercise-utils.mjs && node scripts/test-volume.mjs && node scripts/test-session-utils.mjs && node scripts/test-workout-intelligence.mjs && node scripts/test-motivation.mjs && node scripts/test-records.mjs && node scripts/test-routine-from-session.mjs",
+    "test": "node scripts/test-storage.mjs && node scripts/test-storage-errors.mjs && node scripts/test-exercise-utils.mjs && node scripts/test-volume.mjs && node scripts/test-session-utils.mjs && node scripts/test-workout-intelligence.mjs && node scripts/test-motivation.mjs && node scripts/test-records.mjs && node scripts/test-routine-from-session.mjs && node scripts/test-bundle.mjs && node scripts/test-runtime.mjs && node scripts/test-archive-runtime.mjs && node scripts/test-workout-flow-runtime.mjs && node scripts/test-motivation-runtime.mjs && node scripts/test-routine-from-session-runtime.mjs"
   },
   "dependencies": {
     "lucide-react": "^0.383.0",
