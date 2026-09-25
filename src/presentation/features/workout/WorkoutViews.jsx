@@ -16,6 +16,7 @@ export function WorkoutSession({ mode, session, setSession, exercises, exMap, on
   const [pickerOpen, setPickerOpen] = useState(false);
   const [editingName, setEditingName] = useState(false);
   const [focusMode, setFocusMode] = useState(mode !== 'edit');
+  const [showSetOverview, setShowSetOverview] = useState(true);
   const [focusIndex, setFocusIndex] = useState(() => {
     const sets = session.entries.flatMap(entry => entry.sets);
     const firstOpen = sets.findIndex(set => !set.done);
@@ -303,6 +304,25 @@ export function WorkoutSession({ mode, session, setSession, exercises, exMap, on
       <div className="flex-1 p-5 space-y-4">
         {focusMode && !isEdit ? (
           <>
+            {positions.length > 0 && (
+              <FocusedSetsOverview
+                entries={session.entries}
+                exMap={exMap}
+                activeEntryIndex={focusedPosition?.entryIdx}
+                activeSetIndex={focusedPosition?.setIdx}
+                open={showSetOverview}
+                onToggle={() => setShowSetOverview(value => !value)}
+                onSelect={(entryIdx, setIdx) => {
+                  const index = positions.findIndex(pos => pos.entryIdx === entryIdx && pos.setIdx === setIdx);
+                  if (index >= 0) {
+                    setFocusIndex(index);
+                    requestAnimationFrame(() => document.getElementById('focused-set-editor')?.scrollIntoView?.({
+                      behavior: 'smooth', block: 'start',
+                    }));
+                  }
+                }}
+              />
+            )}
             {focusedPosition && focusedExercise && focusedSet ? (
               <FocusSetCard
                 key={`${focusedPosition.entryIdx}-${focusedPosition.setIdx}`}
@@ -470,12 +490,70 @@ export function StepperField({ label, value, onChange, step = 1, min = 0, unit =
   );
 }
 
+export function FocusedSetsOverview({ entries, exMap, activeEntryIndex, activeSetIndex, open, onToggle, onSelect }) {
+  const completed = entries.reduce((count, entry) => count + entry.sets.filter(set => set.done).length, 0);
+  const total = entries.reduce((count, entry) => count + entry.sets.length, 0);
+  return (
+    <section className="bg-zinc-900 border border-zinc-800 rounded-2xl overflow-hidden" aria-label="Series del entrenamiento">
+      <button type="button" onClick={onToggle} aria-expanded={open} aria-controls="workout-sets-overview"
+        className="w-full flex items-center justify-between gap-3 p-4 text-left">
+        <span>
+          <span className="block font-display text-xl text-zinc-100">TUS SERIES</span>
+          <span className="block text-xs text-zinc-400">{completed} de {total} hechas · toca una para verla o corregirla</span>
+        </span>
+        <ChevronDown className={`w-5 h-5 text-zinc-400 shrink-0 transition-transform ${open ? 'rotate-180' : ''}`} />
+      </button>
+      {open && (
+        <div id="workout-sets-overview" className="px-3 pb-3 space-y-3 border-t border-zinc-800 pt-3">
+          {entries.map((entry, entryIdx) => {
+            const exercise = exMap[entry.exerciseId];
+            if (!exercise) return null;
+            return (
+              <div key={entryIdx}>
+                <div className="text-[11px] font-bold text-zinc-400 uppercase tracking-wide px-1 mb-1.5">
+                  {exercise.name}
+                </div>
+                <div className="space-y-1.5">
+                  {entry.sets.map((set, setIdx) => {
+                    const active = entryIdx === activeEntryIndex && setIdx === activeSetIndex;
+                    return (
+                      <button key={setIdx} type="button" onClick={() => onSelect(entryIdx, setIdx)}
+                        aria-label={`Ver serie ${setIdx + 1} de ${exercise.name}`}
+                        aria-current={active ? 'step' : undefined}
+                        aria-controls="focused-set-editor"
+                        className={`w-full flex items-center gap-2 rounded-xl border px-3 py-2 text-left transition ${active
+                          ? 'border-lime-300 bg-lime-300/10'
+                          : 'border-zinc-800 bg-zinc-950 hover:border-zinc-600'}`}>
+                        <span className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold shrink-0 ${set.done
+                          ? 'bg-lime-300 text-zinc-950' : 'bg-zinc-800 text-zinc-400'}`}>
+                          {setIdx + 1}
+                        </span>
+                        <span className="min-w-0 flex-1 font-mono text-sm text-zinc-100 truncate">
+                          {set.done || validCompletedSet(set, exercise.type)
+                            ? setBrief(set, exercise.type) : 'Sin datos aún'}
+                        </span>
+                        <span className={`text-[10px] font-bold shrink-0 ${set.done ? 'text-lime-300' : 'text-zinc-500'}`}>
+                          {set.done ? 'HECHA' : 'POR HACER'}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </section>
+  );
+}
+
 export function FocusSetCard({ entry, exercise, set, setIndex, position, total, completed,
   ghost, comparison, error, onPrevious, onNext, onUpdate, onComplete, onAddSet }) {
   const routinePrevious = comparison?.routine;
   const generalPrevious = comparison?.general;
   return (
-    <div className="space-y-4">
+    <div id="focused-set-editor" className="space-y-4 scroll-mt-36">
       <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-4">
         <div className="flex items-center justify-between gap-2">
           <button onClick={onPrevious} disabled={position === 0} aria-label="Serie anterior"
