@@ -1,13 +1,16 @@
 import { DurField } from '../../shared/DurField.jsx';
 import { ExercisePicker } from '../../shared/ExercisePicker.jsx';
 import React from 'react';
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { exerciseComparisons, predictGhost, summarizeSession } from '../../../domain/training/workout-intelligence.js';
 import { computePlates, epley, findLastEntryForExercise, inheritSet, platesSummary } from '../../../domain/exercises/exercise-utils.js';
 import { ArrowDown, ArrowLeft, ArrowUp, Check, ChevronDown, ChevronLeft, ChevronRight, Dumbbell, Edit2, MessageSquare, Pencil, Play, Plus, RotateCcw, Save, Search, SkipForward, Timer, Trash2, X } from 'lucide-react';
-import { sessionVolume } from '../../../domain/training/session-utils.js';
+import { completedSets, sessionVolume } from '../../../domain/training/session-utils.js';
 import { fmtDur, formatLong, formatShort, formatTime, parseDur, sessionDuration } from '../../shared/formatters.js';
 import { MUSCLE_GROUPS, exerciseMatches } from '../../../domain/exercises/catalog.js';
+import { detectSetRecords } from '../../../domain/training/records.js';
+import { volumeComparison } from '../../../domain/training/motivation.js';
+import { GoalCelebration, RecordCelebration } from '../motivation/MotivationUI.jsx';
 
 export function WorkoutSession({ mode, session, setSession, exercises, exMap, onFinish, onCancel, previousSessions, plateConfig, showConfirm, finishing = false }) {
   const [pickerOpen, setPickerOpen] = useState(false);
@@ -19,6 +22,8 @@ export function WorkoutSession({ mode, session, setSession, exercises, exMap, on
     return firstOpen >= 0 ? firstOpen : 0;
   });
   const [inputError, setInputError] = useState('');
+  const [recordAlert, setRecordAlert] = useState(null);
+  const closeRecordAlert = useCallback(() => setRecordAlert(null), []);
   const [elapsed, setElapsed] = useState(0);
   const [restTimer, setRestTimer] = useState(null); // { secondsLeft, total, exerciseName }
   const [showSessionNotes, setShowSessionNotes] = useState(!!session.notes);
@@ -141,6 +146,17 @@ export function WorkoutSession({ mode, session, setSession, exercises, exMap, on
     }
     setInputError('');
     const setBecameDone = patch.done === true && !previous.done;
+    const performanceChanged = ['weight', 'reps', 'distance', 'duration']
+      .some(field => Object.hasOwn(patch, field) && patch[field] !== previous[field]);
+    const refreshRecords = !isEdit && (setBecameDone || (previous.done && performanceChanged));
+    const records = refreshRecords ? detectSetRecords({
+      exercise: exMap[entry.exerciseId], set: { ...next, done: true },
+      previousSessions, currentSession: session, entryIndex: entryIdx, setIndex: setIdx,
+    }) : previous.personalRecords || [];
+    const recordSnapshot = { weight: next.weight, reps: next.reps,
+      distance: next.distance, duration: next.duration };
+    const samePerformance = previous.recordSnapshot &&
+      Object.keys(recordSnapshot).every(key => previous.recordSnapshot[key] === recordSnapshot[key]);
     const ghost = setBecameDone && !isEdit ? predictGhost({
       exercise: exMap[entry.exerciseId], setIndex: setIdx,
       sessions: previousSessions, routineId: session.routineId,
@@ -152,13 +168,17 @@ export function WorkoutSession({ mode, session, setSession, exercises, exMap, on
         ...e,
         sets: e.sets.map((st, si) => {
           if (si !== setIdx) return st;
-          return { ...st, ...patch, ...(setBecameDone && ghost ? { ghost } : {}) };
+          return { ...st, ...patch, ...(setBecameDone && ghost ? { ghost } : {}),
+            ...(refreshRecords ? { personalRecords: records, recordSnapshot } : {}) };
         }),
       }),
     }));
     if (setBecameDone && !isEdit) {
+      if (records.length && !samePerformance) {
+        setRecordAlert({ exerciseName: exMap[entry.exerciseId]?.name || entry.exerciseId,
+          records, id: `${session.id}-${entryIdx}-${setIdx}-${Date.now()}` });
+      }
       // Trigger rest timer if exercise has restSeconds
-      const entry = session.entries[entryIdx];
       if (entry?.restSeconds > 0) {
         const ex = exMap[entry.exerciseId];
         setRestTimer({ secondsLeft: entry.restSeconds, total: entry.restSeconds, exerciseName: ex?.name || '' });
@@ -389,6 +409,8 @@ export function WorkoutSession({ mode, session, setSession, exercises, exMap, on
       {pickerOpen && (
         <ExercisePicker exercises={exercises} onPick={addExercise} onClose={() => setPickerOpen(false)} />
       )}
+
+      <RecordCelebration alert={recordAlert} onClose={closeRecordAlert} />
 
       {restTimer && (
         <RestTimerWidget
@@ -998,17 +1020,32 @@ export function SessionDetail({ session, exMap, onBack, onDelete, onEdit, onRepe
   );
 }
 
-export function SessionSummary({ session, previousSessions, allSessions, exMap, onClose, onDetail }) {
+export function SessionSummary({ session, previousSessions, allSessions, exMap, celebration, weeklyGoal, onClose, onDetail }) {
   const summary = summarizeSession(session, previousSessions, exMap);
+  const comparison = volumeComparison(summary.volume, session.id);
+  const recordSets = (session.entries || []).flatMap(completedSets)
+    .filter(set => set.personalRecords?.length).length;
   return (
     <div className="px-5 pt-8 pb-8">
       <div className="text-xs text-lime-300 font-bold tracking-widest">ENTRENAMIENTO GUARDADO</div>
       <h1 className="font-display text-4xl mt-1">{session.name.toUpperCase()}</h1>
+      {celebration && <div className="mt-5"><GoalCelebration message={celebration} goal={weeklyGoal} /></div>}
       <div className="grid grid-cols-3 gap-2 mt-5">
         <div className="bg-zinc-900 rounded-xl p-3"><div className="text-[10px] text-zinc-500">SERIES</div><div className="font-display text-2xl">{summary.sets}</div></div>
         <div className="bg-zinc-900 rounded-xl p-3"><div className="text-[10px] text-zinc-500">EJERCICIOS</div><div className="font-display text-2xl">{summary.exercises}</div></div>
         <div className="bg-zinc-900 rounded-xl p-3"><div className="text-[10px] text-zinc-500">VOLUMEN</div><div className="font-display text-xl">{summary.volume.toLocaleString('es-ES')}<span className="text-xs"> kg</span></div></div>
       </div>
+      {comparison && (
+        <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-4 mt-4">
+          <div className="text-[10px] font-bold tracking-[0.2em] text-lime-300">TODO LO QUE HAS MOVIDO HOY</div>
+          <div className="font-display text-3xl mt-1">{summary.volume.toLocaleString('es-ES')} KG</div>
+          <p className="text-sm text-zinc-300 mt-1">Aproximadamente el peso de <span className="text-lime-300 font-semibold">{comparison.amount.toLocaleString('es-ES')} {comparison.label}</span>.</p>
+          <p className="text-[10px] text-zinc-500 mt-2">Comparación ilustrativa: el volumen suma peso × repeticiones de las series completadas.</p>
+        </div>
+      )}
+      {recordSets > 0 && <div className="mt-4 rounded-xl bg-amber-300/10 border border-amber-300/30 px-4 py-3 text-sm text-amber-200 font-semibold">
+        ★ {recordSets} {recordSets === 1 ? 'serie con récord' : 'series con récord'} en esta sesión
+      </div>}
       <h2 className="font-display text-xl mt-7 mb-3">HOY Y LA PRÓXIMA VEZ</h2>
       <div className="space-y-3">
         {summary.rows.map(row => {
@@ -1017,12 +1054,14 @@ export function SessionSummary({ session, previousSessions, allSessions, exMap, 
           const next = exercise ? predictGhost({ exercise, setIndex: 0,
             sessions: allSessions, routineId: session.routineId,
             targetSet: entry?.sets[0], currentEntry: null }) : null;
+          const records = completedSets(entry).flatMap(set => set.personalRecords || []);
           return (
             <div key={`${row.exerciseId}-${row.entryIndex}`} className="bg-zinc-900 border border-zinc-800 rounded-xl p-4">
               <div className="font-bold text-zinc-100">{row.name}</div>
               <div className="text-xs text-zinc-400 mt-1">{row.sets} serie(s) · primera: {setBrief(row.first, exercise?.type)}</div>
               {row.before && <div className="text-xs text-zinc-500 mt-1">Anterior {row.scope === 'rutina' ? 'en esta rutina' : 'general'}: {setBrief(row.before, exercise?.type)}</div>}
               {next && <div className="text-xs text-lime-300 mt-2">Próximo ghost: {setBrief(next, exercise.type)}</div>}
+              {records.length > 0 && <div className="text-xs text-amber-300 mt-2">★ {[...new Set(records.map(record => record.label))].join(' · ')}</div>}
             </div>
           );
         })}

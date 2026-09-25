@@ -30,6 +30,8 @@ La dependencia apunta hacia el dominio: `app` coordina la infraestructura y la p
 4. La propuesta se guarda junto a la serie completada para conservar lo que se mostró; el resultado real se guarda por separado.
 5. `infrastructure/storage/storage.js` persiste el cambio. Al finalizar, el resumen utiliza únicamente series completadas.
 
+La meta semanal y los mensajes se calculan en `domain/training/motivation.js`. `domain/training/records.js` compara cada serie completada con el historial del mismo ejercicio; la interfaz muestra el aviso y guarda la marca junto a la serie. Ninguna de estas reglas depende de React.
+
 ## Desarrollo y despliegue
 
 `npm ci`, `npm run build` y `npm test` son las comprobaciones de referencia. Las pruebas de interfaz usan el bundle de `dist/`, por lo que el build debe ejecutarse antes de `npm test`. La rama `main` debe pasar estas comprobaciones antes de publicarse.

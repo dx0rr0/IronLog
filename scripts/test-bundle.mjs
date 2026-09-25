@@ -45,7 +45,7 @@ ok('bundle references persist API', code.includes('navigator.storage') || code.i
 // New feature presence checks (Nov 2025 release: autofill, plates, 1RM, bodyweight)
 ok('bundle persists body-weights key', code.includes('body-weights'));
 ok('bundle persists plate-config key', code.includes('plate-config'));
-ok('bundle exports version 3 of backup format', code.includes('version:3') || code.includes('"version":3') || code.includes('version: 3'));
+ok('bundle exports version 4 of backup format', code.includes('version:4') || code.includes('"version":4') || code.includes('version: 4'));
 ok('bundle ships plate calculator UI ("DISCOS")', code.includes('DISCOS'));
 ok('bundle ships body-weight UI ("PESO CORPORAL")', code.includes('PESO CORPORAL'));
 ok('bundle ships volume tab ("VOLUMEN")', code.includes('VOLUMEN'));

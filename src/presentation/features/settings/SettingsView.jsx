@@ -2,12 +2,12 @@ import React from 'react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { sessionVolume } from '../../../domain/training/session-utils.js';
 import { getLastBackupAt, getStorageEstimate } from '../../../infrastructure/storage/persistence.js';
-import { AlertTriangle, Check, ChevronRight, Download, Dumbbell, HardDrive, Plus, ShieldCheck, Trash2, Upload, X } from 'lucide-react';
+import { AlertTriangle, Check, ChevronRight, Download, Dumbbell, HardDrive, Plus, ShieldCheck, Target, Trash2, Upload, X } from 'lucide-react';
 import { DEFAULT_PLATE_CONFIG, computePlates, platesSummary } from '../../../domain/exercises/exercise-utils.js';
 import { fmtDur, sessionDuration } from '../../shared/formatters.js';
 import { buildLabel } from '../../../app/build-info.js';
 
-export function SettingsView({ sessions, customExercises, routines = [], bodyWeights = [], plateConfig, onUpdatePlateConfig, persistGranted, onExport, onImport, onReset }) {
+export function SettingsView({ sessions, customExercises, routines = [], bodyWeights = [], plateConfig, onUpdatePlateConfig, persistGranted, onExport, onImport, onReset, weeklyGoal, onUpdateWeeklyGoal }) {
   const fileInput = useRef();
   const totalDur = sessions.reduce((a, s) => a + sessionDuration(s), 0);
   const totalVol = sessions.reduce((a, s) => a + sessionVolume(s), 0);
@@ -48,6 +48,19 @@ export function SettingsView({ sessions, customExercises, routines = [], bodyWei
       </header>
 
       <div className="px-5 space-y-4">
+        <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-4">
+          <div className="flex items-center gap-2 text-lime-300 mb-2"><Target className="w-4 h-4" /><span className="text-xs uppercase tracking-wider font-bold">Meta semanal</span></div>
+          <p className="text-xs text-zinc-400 mb-3">Elige cuántos días distintos quieres entrenar de lunes a domingo.</p>
+          <div className="grid grid-cols-7 gap-1.5">
+            {Array.from({ length: 7 }, (_, index) => index + 1).map(days => (
+              <button key={days} type="button" onClick={() => onUpdateWeeklyGoal(days)} aria-pressed={weeklyGoal === days}
+                className={`aspect-square rounded-lg font-bold ${weeklyGoal === days ? 'bg-lime-300 text-zinc-950' : 'bg-zinc-800 text-zinc-300'}`}>
+                {days}
+              </button>
+            ))}
+          </div>
+          <div className="text-[11px] text-zinc-500 mt-2">{weeklyGoal ? `${weeklyGoal} ${weeklyGoal === 1 ? 'día' : 'días'} por semana` : 'Sin meta definida'}</div>
+        </div>
         <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-4">
           <div className="text-xs text-zinc-500 uppercase tracking-wider font-bold mb-3">Resumen</div>
           <div className="grid grid-cols-2 gap-3 font-mono text-sm">

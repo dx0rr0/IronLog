@@ -12,6 +12,16 @@ App personal para registrar entrenamientos: rutinas, series con RIR, autorrellen
 
 Consulta [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) para las dependencias entre capas y el flujo de datos. `dist/` y `node_modules/` son archivos generados y no se versionan.
 
+## Cambios de la versión 1.5.0
+
+- Meta semanal de 1 a 7 días distintos, con elección inicial y edición posterior en Ajustes. La semana va de lunes a domingo; solo cuentan entrenamientos con series completadas.
+- Ocho mensajes de celebración que rotan al alcanzar la meta semanal.
+- Resumen con volumen total y una equivalencia de masa ilustrativa calculada a partir de las series completadas.
+- Aviso animado al confirmar una serie que supera una marca anterior de peso, repeticiones con el mismo peso o 1RM estimado. También se reconocen marcas de repeticiones, duración y distancia cuando el tipo de ejercicio corresponde.
+- La meta semanal se incluye en la exportación JSON (formato v4). Las copias anteriores siguen pudiendo importarse.
+
+Esta versión está en el repositorio; se desplegará solo cuando lo solicites.
+
 ## Cambios de la versión 1.4.0
 
 - Modo serie para centrarse en una serie, ajustar el resultado real y avanzar a la siguiente.

@@ -4,7 +4,7 @@ dev-dist
 .vite
 .DS_Store
 *.log
-.env
-.env.local
+.env*
+!.env.example
 .vercel
 .netlify

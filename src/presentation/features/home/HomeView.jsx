@@ -4,17 +4,19 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Activity, Award, Clock, Dumbbell, Flame, Play, Plus, Trash2, X } from 'lucide-react';
 import { bodyWeightDelta } from '../../../domain/exercises/exercise-utils.js';
 import { Area, AreaChart, ResponsiveContainer, YAxis } from 'recharts';
-import { sessionVolume } from '../../../domain/training/session-utils.js';
+import { hasCompletedSet, sessionVolume } from '../../../domain/training/session-utils.js';
 import { dateKey, fmtDur, formatLong, formatShort, sessionDuration } from '../../shared/formatters.js';
 import { buildLabel } from '../../../app/build-info.js';
 import { MUSCLE_GROUPS, availableRoutineEntries } from '../../../domain/exercises/catalog.js';
+import { goalMessage, weeklyGoalProgress } from '../../../domain/training/motivation.js';
+import { WeeklyGoalCard } from '../motivation/MotivationUI.jsx';
 
-export function HomeView({ sessions, exMap, routines, currentSession, bodyWeights = [], onSaveBodyWeight, onDeleteBodyWeight, showConfirm, onStart, onStartRoutine, onResume, onOpenSession, onGoRoutines }) {
+export function HomeView({ sessions, exMap, routines, currentSession, bodyWeights = [], onSaveBodyWeight, onDeleteBodyWeight, showConfirm, onStart, onStartRoutine, onResume, onOpenSession, onGoRoutines, weeklyGoal, onChangeGoal }) {
   const [bwModalOpen, setBwModalOpen] = useState(false);
+  const goalProgress = useMemo(() => weeklyGoalProgress(sessions, weeklyGoal), [sessions, weeklyGoal]);
   const stats = useMemo(() => {
-    const now = Date.now();
-    const weekAgo = now - 7 * 24 * 3600 * 1000;
-    const week = sessions.filter(s => new Date(s.date).getTime() >= weekAgo);
+    const weekKeys = new Set(weeklyGoalProgress([], 1).weekDays.map(day => day.key));
+    const week = sessions.filter(s => hasCompletedSet(s) && weekKeys.has(dateKey(s.date)));
     const totalTime = week.reduce((a, s) => a + sessionDuration(s), 0);
     const streak = computeStreak(sessions);
     return { weekCount: week.length, weekTime: totalTime, totalCount: sessions.length, streak };
@@ -63,6 +65,12 @@ export function HomeView({ sessions, exMap, routines, currentSession, bodyWeight
           </button>
         )}
       </div>
+
+      {goalProgress && (
+        <div className="px-5 mt-4">
+          <WeeklyGoalCard progress={goalProgress} message={goalMessage(goalProgress.weekStart)} onChange={onChangeGoal} />
+        </div>
+      )}
 
       {!currentSession && routines.length > 0 && (
         <div className="px-5 mt-4">

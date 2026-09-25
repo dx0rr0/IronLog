@@ -16,6 +16,8 @@ import { CalendarView } from '../presentation/features/calendar/CalendarView.jsx
 import { ProgressView } from '../presentation/features/progress/ProgressView.jsx';
 import { SettingsView } from '../presentation/features/settings/SettingsView.jsx';
 import { BottomNav, ConfirmDialog } from '../presentation/shell/Navigation.jsx';
+import { goalMessage, goalReachedBySession, weeklyGoalProgress } from '../domain/training/motivation.js';
+import { WeeklyGoalSetup } from '../presentation/features/motivation/MotivationUI.jsx';
 
 export default function App() {
   const [tab, setTab] = useState('home');
@@ -33,6 +35,8 @@ export default function App() {
   const [selectedDate, setSelectedDate] = useState(null);
   const [bodyWeights, setBodyWeights] = useState([]); // [{date: ISO, kg: number}], newest first
   const [plateConfig, setPlateConfig] = useState(DEFAULT_PLATE_CONFIG);
+  const [weeklyGoal, setWeeklyGoal] = useState(null);
+  const [goalPromptDismissed, setGoalPromptDismissed] = useState(false);
   const [view, setView] = useState(null); // {kind, data} for sub-views
   const [toast, setToast] = useState(null);
   const [dialog, setDialog] = useState(null); // {title, body, onConfirm, danger, confirmLabel, cancelLabel}
@@ -47,19 +51,21 @@ export default function App() {
   useEffect(() => {
     (async () => {
       try {
-        const [ce, ss, cs, rt, bw, pc] = await Promise.all([
+        const [ce, ss, cs, rt, bw, pc, wg] = await Promise.all([
           storage.get('custom-exercises'),
           storage.get('sessions'),
           storage.get('current-session'),
           storage.get('routines'),
           storage.get('body-weights'),
           storage.get('plate-config'),
+          storage.get('weekly-goal'),
         ]);
         if (ce) setCustomExercises(ce);
         if (ss) setSessions(ss);
         if (cs) setCurrentSession(cs);
         if (rt) setRoutines(rt);
         if (Array.isArray(bw)) setBodyWeights(bw);
+        if (Number.isInteger(wg) && wg >= 1 && wg <= 7) setWeeklyGoal(wg);
         if (pc && typeof pc === 'object') {
           // Merge with defaults so new fields added in future versions are
           // present even if the stored config is from an older version.
@@ -97,6 +103,7 @@ export default function App() {
   useEffect(() => { if (hydrated) trackSave(storage.set('routines', routines)); }, [routines, hydrated, trackSave]);
   useEffect(() => { if (hydrated) trackSave(storage.set('body-weights', bodyWeights)); }, [bodyWeights, hydrated, trackSave]);
   useEffect(() => { if (hydrated) trackSave(storage.set('plate-config', plateConfig)); }, [plateConfig, hydrated, trackSave]);
+  useEffect(() => { if (hydrated) trackSave(storage.set('weekly-goal', weeklyGoal)); }, [weeklyGoal, hydrated, trackSave]);
   useEffect(() => {
     if (!hydrated) return;
     trackSave(currentSession
@@ -111,6 +118,7 @@ export default function App() {
       storage.set('routines', routines),
       storage.set('body-weights', bodyWeights),
       storage.set('plate-config', plateConfig),
+      storage.set('weekly-goal', weeklyGoal),
       currentSession ? storage.set('current-session', currentSession) : storage.del('current-session'),
     ]);
     setSaveError(results.some(ok => !ok));
@@ -195,7 +203,10 @@ export default function App() {
     }
     setSessions(nextSessions);
     setCurrentSession(null);
-    setView({ kind: 'summary', data: finished });
+    const goalReached = goalReachedBySession(sessions, finished, weeklyGoal);
+    const progress = goalReached ? weeklyGoalProgress(nextSessions, weeklyGoal, finished.date) : null;
+    setView({ kind: 'summary', data: finished,
+      celebration: progress ? goalMessage(progress.weekStart) : null });
     showToast('Entrenamiento guardado ✓');
   };
 
@@ -321,7 +332,7 @@ export default function App() {
   // ---------- import / export ----------
   const exportData = async () => {
     const data = {
-      version: 3,
+      version: 4,
       exportedAt: new Date().toISOString(),
       customExercises,
       sessions,
@@ -329,6 +340,7 @@ export default function App() {
       routines,
       bodyWeights,
       plateConfig,
+      weeklyGoal,
     };
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
@@ -393,6 +405,10 @@ export default function App() {
                 plates: Array.isArray(data.plateConfig.plates) && data.plateConfig.plates.length ? data.plateConfig.plates : DEFAULT_PLATE_CONFIG.plates,
               });
             }
+            if (Number.isInteger(data.weeklyGoal) && data.weeklyGoal >= 1 && data.weeklyGoal <= 7) {
+              setWeeklyGoal(data.weeklyGoal);
+              setGoalPromptDismissed(true);
+            }
             showToast('Datos importados ✓');
           },
         });
@@ -427,6 +443,8 @@ export default function App() {
             setRoutines([]);
             setBodyWeights([]);
             setCurrentSession(null);
+            setWeeklyGoal(null);
+            setGoalPromptDismissed(false);
             showToast('Todos los datos eliminados');
           },
         });
@@ -541,6 +559,8 @@ export default function App() {
               previousSessions={sessions.filter(s => s.id !== view.data.id)}
               allSessions={sessions}
               exMap={exMap}
+              celebration={view.celebration}
+              weeklyGoal={weeklyGoal}
               onClose={() => setView(null)}
               onDetail={() => setView({ kind: 'session', data: view.data })}
             />
@@ -574,6 +594,8 @@ export default function App() {
                   onResume={() => setView({ kind: 'active' })}
                   onOpenSession={s => setView({ kind: 'session', data: s })}
                   onGoRoutines={() => setTab('routines')}
+                  weeklyGoal={weeklyGoal}
+                  onChangeGoal={() => setTab('settings')}
                 />
               )}
               {tab === 'routines' && (
@@ -622,6 +644,8 @@ export default function App() {
                   onExport={exportData}
                   onImport={importData}
                   onReset={resetAll}
+                  weeklyGoal={weeklyGoal}
+                  onUpdateWeeklyGoal={setWeeklyGoal}
                 />
               )}
             </>
@@ -657,6 +681,10 @@ export default function App() {
             {...dialog}
             onClose={() => setDialog(null)}
           />
+        )}
+        {weeklyGoal === null && !goalPromptDismissed && (
+          <WeeklyGoalSetup onSave={days => { setWeeklyGoal(days); setGoalPromptDismissed(true); }}
+            onDismiss={() => setGoalPromptDismissed(true)} />
         )}
       </div>
     </>
