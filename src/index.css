@@ -39,7 +39,7 @@ body {
 .record-celebration { animation: record-enter 0.55s cubic-bezier(.2, 1.5, .5, 1) both; }
 .record-trophy { animation: record-pop 0.9s ease-out 0.15s both; }
 .record-screen-flash { opacity: 0; animation: record-flash 1.3s ease-out both; }
-.record-countdown { animation: record-countdown 7s linear both; }
+.record-countdown { animation: record-countdown 2s linear both; }
 .record-sparks { position: absolute; inset: 0; pointer-events: none; }
 .record-sparks i {
   position: absolute;

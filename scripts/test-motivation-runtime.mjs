@@ -70,8 +70,9 @@ window.document.querySelector('[aria-label="Aumentar Repeticiones"]').click();
 await new Promise(resolve => setTimeout(resolve, 900));
 check('improving an already completed set also celebrates a record',
   window.document.body.textContent.includes('NUEVO RÉCORD PERSONAL'));
-button('SEGUIR ENTRENANDO').click();
-await flush();
+await new Promise(resolve => setTimeout(resolve, 2300));
+check('record celebration closes automatically after about two seconds',
+  !window.document.body.textContent.includes('NUEVO RÉCORD PERSONAL'));
 button('FIN').click();
 await flush();
 check('weekly goal has a celebration message', window.document.body.textContent.includes('1 DÍA ESTA SEMANA'));
@@ -79,4 +80,4 @@ check('saved summary has a mass comparison', window.document.body.textContent.in
 check('record appears in the saved summary', window.document.body.textContent.includes('serie con récord'));
 check('corrected actual reps are saved', (await storage.get('sessions'))[0].entries[0].sets[0].reps === 10);
 
-console.log('13 motivation runtime checks passed');
+console.log('14 motivation runtime checks passed');

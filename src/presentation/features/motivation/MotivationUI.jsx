@@ -84,7 +84,7 @@ export function GoalCelebration({ message, goal }) {
 export function RecordCelebration({ alert, onClose }) {
   useEffect(() => {
     if (!alert) return undefined;
-    const timer = setTimeout(onClose, 7000);
+    const timer = setTimeout(onClose, 2000);
     return () => clearTimeout(timer);
   }, [alert, onClose]);
   if (!alert) return null;
