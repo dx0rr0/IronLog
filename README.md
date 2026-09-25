@@ -70,6 +70,8 @@ npm run dev
 
 Verás algo como `Local: http://localhost:5173/`. Abre esa URL en el navegador y juega con la app. Cualquier cambio que hagas en el código se refleja al instante. Para parar el servidor: Ctrl+C en la terminal.
 
+Si tienes GNU Make, también puedes ejecutar `make serve` desde la raíz del proyecto. Instala las dependencias con `npm ci` si faltan y arranca Vite en `http://localhost:5173/`. Para abrirlo desde el móvil conectado a la misma red, usa `make serve HOST=0.0.0.0` y visita la dirección de red que muestre Vite. `make test` y `make build` ejecutan las pruebas y la compilación, respectivamente; ninguno despliega la app.
+
 ### 3) Construye la versión final
 
 ```bash
