@@ -1,7 +1,7 @@
 import { DurField } from '../../shared/DurField.jsx';
 import { ExercisePicker } from '../../shared/ExercisePicker.jsx';
 import React from 'react';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { exerciseComparisons, predictGhost, summarizeSession } from '../../../domain/training/workout-intelligence.js';
 import { computePlates, epley, findLastEntryForExercise, inheritSet, platesSummary } from '../../../domain/exercises/exercise-utils.js';
 import { ArrowDown, ArrowLeft, ArrowUp, Check, ChevronDown, ChevronLeft, ChevronRight, Dumbbell, Edit2, MessageSquare, Pencil, Play, Plus, RotateCcw, Save, Search, SkipForward, Timer, Trash2, X } from 'lucide-react';
@@ -25,6 +25,8 @@ export function WorkoutSession({ mode, session, setSession, exercises, exMap, on
   const [inputError, setInputError] = useState('');
   const [recordAlert, setRecordAlert] = useState(null);
   const closeRecordAlert = useCallback(() => setRecordAlert(null), []);
+  const recordEditTimer = useRef(null);
+  useEffect(() => () => clearTimeout(recordEditTimer.current), []);
   const [elapsed, setElapsed] = useState(0);
   const [restTimer, setRestTimer] = useState(null); // { secondsLeft, total, exerciseName }
   const [showSessionNotes, setShowSessionNotes] = useState(!!session.notes);
@@ -149,6 +151,10 @@ export function WorkoutSession({ mode, session, setSession, exercises, exMap, on
     const setBecameDone = patch.done === true && !previous.done;
     const performanceChanged = ['weight', 'reps', 'distance', 'duration']
       .some(field => Object.hasOwn(patch, field) && patch[field] !== previous[field]);
+    if (performanceChanged || Object.hasOwn(patch, 'done')) {
+      clearTimeout(recordEditTimer.current);
+      recordEditTimer.current = null;
+    }
     const refreshRecords = !isEdit && (setBecameDone || (previous.done && performanceChanged));
     const records = refreshRecords ? detectSetRecords({
       exercise: exMap[entry.exerciseId], set: { ...next, done: true },
@@ -174,11 +180,13 @@ export function WorkoutSession({ mode, session, setSession, exercises, exMap, on
         }),
       }),
     }));
+    if (!isEdit && records.length && !samePerformance && (setBecameDone || (previous.done && performanceChanged))) {
+      const alert = { exerciseName: exMap[entry.exerciseId]?.name || entry.exerciseId,
+        records, id: `${session.id}-${entryIdx}-${setIdx}-${Date.now()}` };
+      if (setBecameDone) setRecordAlert(alert);
+      else recordEditTimer.current = setTimeout(() => setRecordAlert(alert), 700);
+    }
     if (setBecameDone && !isEdit) {
-      if (records.length && !samePerformance) {
-        setRecordAlert({ exerciseName: exMap[entry.exerciseId]?.name || entry.exerciseId,
-          records, id: `${session.id}-${entryIdx}-${setIdx}-${Date.now()}` });
-      }
       // Trigger rest timer if exercise has restSeconds
       if (entry?.restSeconds > 0) {
         const ex = exMap[entry.exerciseId];
@@ -532,8 +540,9 @@ export function FocusedSetsOverview({ entries, exMap, activeEntryIndex, activeSe
                           {set.done || validCompletedSet(set, exercise.type)
                             ? setBrief(set, exercise.type) : 'Sin datos aún'}
                         </span>
-                        <span className={`text-[10px] font-bold shrink-0 ${set.done ? 'text-lime-300' : 'text-zinc-500'}`}>
-                          {set.done ? 'HECHA' : 'POR HACER'}
+                        <span className={`text-[10px] font-bold shrink-0 ${set.personalRecords?.length && set.done
+                          ? 'text-amber-300' : set.done ? 'text-lime-300' : 'text-zinc-500'}`}>
+                          {set.done ? (set.personalRecords?.length ? '★ RÉCORD' : 'HECHA') : 'POR HACER'}
                         </span>
                       </button>
                     );
@@ -570,6 +579,13 @@ export function FocusSetCard({ entry, exercise, set, setIndex, position, total, 
           <div className="h-full bg-lime-300" style={{ width: `${total ? 100 * completed / total : 0}%` }} />
         </div>
       </div>
+
+      {set.done && set.personalRecords?.length > 0 && (
+        <div className="rounded-2xl border border-amber-300/50 bg-amber-300/10 p-4 text-amber-100">
+          <div className="text-[11px] font-bold tracking-[0.18em] text-amber-300">★ RÉCORD PERSONAL EN ESTA SERIE</div>
+          <div className="text-sm mt-1">{set.personalRecords.map(record => `${record.label}: ${record.detail}`).join(' · ')}</div>
+        </div>
+      )}
 
       {ghost ? (
         <div className="bg-lime-300/10 border border-lime-300/40 rounded-2xl p-4">
@@ -986,6 +1002,9 @@ export function SetRow({ idx, set, type, unit, previous, ghost, plateConfig, onU
           {oneRm != null && plateText && <span className="text-zinc-700">·</span>}
           {plateText && <span className="truncate">{plateText}</span>}
         </div>
+      )}
+      {set.done && set.personalRecords?.length > 0 && (
+        <div className="text-[10px] font-bold text-amber-300 pl-12 pb-1">★ RÉCORD PERSONAL</div>
       )}
     </div>
   );

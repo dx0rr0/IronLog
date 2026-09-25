@@ -53,19 +53,30 @@ button('MARCAR SERIE HECHA').click();
 await flush();
 check('a live record appears immediately', window.document.body.textContent.includes('NUEVO RÉCORD'));
 check('same-weight repetition record is explained', window.document.body.textContent.includes('Más reps con este peso'));
+check('record celebration has confetti and a prominent continue action',
+  window.document.querySelectorAll('.record-sparks i').length === 18 && !!button('SEGUIR ENTRENANDO'));
 window.document.querySelector('[aria-label="Cerrar aviso de récord"]').click();
 await flush();
+check('record remains visible on the completed set',
+  window.document.body.textContent.includes('RÉCORD PERSONAL EN ESTA SERIE') &&
+  window.document.querySelector('#workout-sets-overview')?.textContent.includes('★ RÉCORD'));
 button('SERIE HECHA ✓ · DESMARCAR').click();
 await flush();
 button('MARCAR SERIE HECHA').click();
 await flush();
 check('marking the same performance again does not repeat the alert',
   !window.document.body.textContent.includes('NUEVO RÉCORD'));
+window.document.querySelector('[aria-label="Aumentar Repeticiones"]').click();
+await new Promise(resolve => setTimeout(resolve, 900));
+check('improving an already completed set also celebrates a record',
+  window.document.body.textContent.includes('NUEVO RÉCORD PERSONAL'));
+button('SEGUIR ENTRENANDO').click();
+await flush();
 button('FIN').click();
 await flush();
 check('weekly goal has a celebration message', window.document.body.textContent.includes('1 DÍA ESTA SEMANA'));
 check('saved summary has a mass comparison', window.document.body.textContent.includes('TODO LO QUE HAS MOVIDO HOY'));
 check('record appears in the saved summary', window.document.body.textContent.includes('serie con récord'));
-check('actual reps are saved', (await storage.get('sessions'))[0].entries[0].sets[0].reps === 9);
+check('corrected actual reps are saved', (await storage.get('sessions'))[0].entries[0].sets[0].reps === 10);
 
-console.log('10 motivation runtime checks passed');
+console.log('13 motivation runtime checks passed');

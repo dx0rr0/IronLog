@@ -14,32 +14,45 @@ body {
 }
 
 @keyframes record-enter {
-  from { opacity: 0; transform: translateY(-18px) scale(0.94); }
-  to { opacity: 1; transform: translateY(0) scale(1); }
+  0% { opacity: 0; transform: scale(0.72) rotate(-4deg); }
+  65% { opacity: 1; transform: scale(1.06) rotate(1deg); }
+  100% { opacity: 1; transform: scale(1) rotate(0); }
 }
 @keyframes record-pop {
-  0%, 60%, 100% { transform: rotate(0) scale(1); }
-  30% { transform: rotate(-12deg) scale(1.22); }
+  0% { transform: rotate(-18deg) scale(0.5); }
+  55% { transform: rotate(12deg) scale(1.25); }
+  100% { transform: rotate(0) scale(1); }
 }
 @keyframes record-spark {
   from { opacity: 1; transform: translate(0, 0) rotate(0); }
-  to { opacity: 0; transform: translate(var(--spark-x), 84px) rotate(180deg); }
+  to { opacity: 0; transform: translate(var(--spark-x), var(--spark-y)) rotate(240deg); }
 }
-.record-celebration { animation: record-enter 0.38s cubic-bezier(.2, 1.5, .5, 1) both; }
-.record-trophy { animation: record-pop 0.8s ease-in-out 0.25s both; }
+@keyframes record-flash {
+  0% { opacity: 0; }
+  20% { opacity: 1; }
+  100% { opacity: 0; }
+}
+@keyframes record-countdown {
+  from { width: 100%; }
+  to { width: 0; }
+}
+.record-celebration { animation: record-enter 0.55s cubic-bezier(.2, 1.5, .5, 1) both; }
+.record-trophy { animation: record-pop 0.9s ease-out 0.15s both; }
+.record-screen-flash { opacity: 0; animation: record-flash 1.3s ease-out both; }
+.record-countdown { animation: record-countdown 7s linear both; }
 .record-sparks { position: absolute; inset: 0; pointer-events: none; }
 .record-sparks i {
   position: absolute;
   left: var(--spark-left);
-  top: 8%;
-  width: 5px;
-  height: 12px;
+  top: 10%;
+  width: 7px;
+  height: 16px;
   border-radius: 2px;
   background: #fcd34d;
-  animation: record-spark 1.2s ease-out 0.15s both;
+  animation: record-spark 1.7s ease-out 0.15s both;
 }
 .record-sparks i:nth-child(3n) { background: #d4ff37; }
 .record-sparks i:nth-child(4n) { background: #fff; }
 @media (prefers-reduced-motion: reduce) {
-  .record-celebration, .record-trophy, .record-sparks i { animation: none; }
+  .record-celebration, .record-trophy, .record-sparks i, .record-screen-flash, .record-countdown { animation: none; }
 }

@@ -84,33 +84,40 @@ export function GoalCelebration({ message, goal }) {
 export function RecordCelebration({ alert, onClose }) {
   useEffect(() => {
     if (!alert) return undefined;
-    const timer = setTimeout(onClose, 5200);
+    const timer = setTimeout(onClose, 7000);
     return () => clearTimeout(timer);
   }, [alert, onClose]);
   if (!alert) return null;
   return (
-    <div role="status" aria-live="polite" className="fixed top-24 left-4 right-4 max-w-md mx-auto z-[65] pointer-events-none">
-      <div className="record-celebration relative overflow-hidden rounded-2xl border border-amber-300/70 bg-zinc-900/95 backdrop-blur-xl shadow-2xl shadow-amber-300/15 p-4 pointer-events-auto">
+    <div role="status" aria-live="polite" className="fixed inset-0 z-[65] flex items-center justify-center p-5 pointer-events-none">
+      <div className="record-screen-flash absolute inset-0 bg-amber-300/20" aria-hidden="true" />
+      <div key={alert.id} className="record-celebration relative w-full max-w-sm overflow-hidden rounded-3xl border-2 border-amber-300 bg-zinc-900 shadow-2xl shadow-amber-300/30 p-6 text-center pointer-events-auto">
         <div className="record-sparks" aria-hidden="true">
-          {Array.from({ length: 12 }, (_, i) => <i key={i} style={{ '--spark-left': `${12 + i * 7}%`, '--spark-x': `${(i - 6) * 22}px` }} />)}
+          {Array.from({ length: 18 }, (_, i) => <i key={i} style={{
+            '--spark-left': `${7 + i * 5}%`, '--spark-x': `${(i - 9) * 24}px`,
+            '--spark-y': `${75 + i % 4 * 25}px`,
+          }} />)}
         </div>
-        <div className="relative flex gap-3 items-start">
-          <div className="shrink-0 w-11 h-11 rounded-xl bg-amber-300 text-zinc-950 flex items-center justify-center record-trophy">
-            <Trophy className="w-6 h-6" />
+        <button onClick={onClose} aria-label="Cerrar aviso de récord"
+          className="absolute top-3 right-3 z-10 text-zinc-400 p-2"><X className="w-5 h-5" /></button>
+        <div className="relative">
+          <div className="record-trophy w-20 h-20 mx-auto rounded-2xl bg-amber-300 text-zinc-950 flex items-center justify-center shadow-lg shadow-amber-300/30">
+            <Trophy className="w-10 h-10" />
           </div>
-          <div className="min-w-0 flex-1">
-            <div className="text-[10px] font-bold tracking-[0.2em] text-amber-300">NUEVO RÉCORD</div>
-            <div className="font-display text-xl leading-tight mt-0.5">{alert.exerciseName.toUpperCase()}</div>
-            <div className="flex flex-wrap gap-1.5 mt-2">
-              {alert.records.map(record => (
-                <span key={record.kind} className="text-[11px] rounded-full bg-amber-300/15 text-amber-100 px-2 py-1">
-                  {record.label}: {record.detail}
-                </span>
-              ))}
-            </div>
+          <div className="text-xs font-bold tracking-[0.22em] text-amber-300 mt-5">NUEVO RÉCORD PERSONAL</div>
+          <div className="font-display text-3xl leading-tight mt-2 text-white">{alert.exerciseName.toUpperCase()}</div>
+          <div className="flex flex-wrap justify-center gap-2 mt-4">
+            {alert.records.map(record => (
+              <span key={record.kind} className="text-xs rounded-full border border-amber-300/30 bg-amber-300/15 text-amber-100 px-3 py-1.5">
+                {record.label}: {record.detail}
+              </span>
+            ))}
           </div>
-          <button onClick={onClose} aria-label="Cerrar aviso de récord" className="text-zinc-400 p-1"><X className="w-4 h-4" /></button>
+          <button onClick={onClose} className="mt-6 w-full bg-amber-300 text-zinc-950 rounded-xl py-3 font-bold">
+            SEGUIR ENTRENANDO
+          </button>
         </div>
+        <div className="record-countdown absolute bottom-0 left-0 h-1 bg-amber-300" aria-hidden="true" />
       </div>
     </div>
   );
