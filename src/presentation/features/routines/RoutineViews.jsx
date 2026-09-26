@@ -4,6 +4,7 @@ import { ArrowDown, ArrowUp, ClipboardList, Copy, MessageSquare, Pencil, Play, P
 import { useState } from 'react';
 import { MUSCLE_GROUPS, availableRoutineEntries } from '../../../domain/exercises/catalog.js';
 import { ExercisePicker } from '../../shared/ExercisePicker.jsx';
+import { NewExerciseForm } from '../exercises/ExerciseViews.jsx';
 import { fmtDur } from '../../shared/formatters.js';
 
 export function RoutinesView({ routines, exMap, onStart, onNew, onEdit, onDelete, onDuplicate, hasActive }) {
@@ -104,7 +105,7 @@ export function RoutinesView({ routines, exMap, onStart, onNew, onEdit, onDelete
 // ROUTINE EDITOR (create / edit)
 // ============================================================
 
-export function RoutineEditor({ initial, draft, exercises, exMap, onSave, onCancel, showConfirm }) {
+export function RoutineEditor({ initial, draft, exercises, exMap, onCreateExercise, onSave, onCancel, showConfirm }) {
   const [routine, setRoutine] = useState(() => initial || draft ? {
     ...JSON.parse(JSON.stringify(initial || draft)),
     exercises: JSON.parse(JSON.stringify(availableRoutineEntries(initial || draft, exMap))),
@@ -114,6 +115,7 @@ export function RoutineEditor({ initial, draft, exercises, exMap, onSave, onCanc
     exercises: [],
   });
   const [pickerOpen, setPickerOpen] = useState(false);
+  const [creatingExercise, setCreatingExercise] = useState(false);
   const [dirty, setDirty] = useState(false);
 
   const update = (patch) => { setRoutine(r => ({ ...r, ...patch })); setDirty(true); };
@@ -298,8 +300,22 @@ export function RoutineEditor({ initial, draft, exercises, exMap, onSave, onCanc
       </div>
 
       {pickerOpen && (
-        <ExercisePicker exercises={exercises} onPick={addExercise} onClose={() => setPickerOpen(false)} />
+        <ExercisePicker exercises={exercises} onPick={addExercise} onClose={() => setPickerOpen(false)}
+          onCreate={() => { setPickerOpen(false); setCreatingExercise(true); }} />
       )}
+      {creatingExercise && <div className="fixed inset-0 z-50 overflow-y-auto bg-zinc-950">
+        <div className="max-w-md mx-auto">
+          <NewExerciseForm onCancel={() => { setCreatingExercise(false); setPickerOpen(true); }}
+            onSave={async values => {
+              const created = await onCreateExercise(values);
+              if (created) {
+                addExercise(created);
+                setCreatingExercise(false);
+              }
+              return created;
+            }} />
+        </div>
+      </div>}
     </div>
   );
 }

@@ -30,6 +30,13 @@ window.eval(code);
 const flush = () => new Promise(resolve => setTimeout(resolve, 250));
 const button = text => [...window.document.querySelectorAll('button')]
   .find(el => el.textContent.includes(text));
+const setNumber = (input, value) => {
+  const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+  setter.call(input, String(value));
+  input.dispatchEvent(new window.Event('input', { bubbles: true }));
+  input.dispatchEvent(new window.Event('change', { bubbles: true }));
+};
+const repsInput = () => [...window.document.querySelectorAll('input[type="number"]')][1];
 const check = (name, passed) => {
   if (!passed) throw new Error(name);
   console.log('  ✓', name);
@@ -47,9 +54,9 @@ button('Base').click();
 await flush();
 button('REPETIR ENTRENAMIENTO').click();
 await flush();
-window.document.querySelector('[aria-label="Aumentar Repeticiones"]').click();
+setNumber(repsInput(), 9);
 await flush();
-button('MARCAR SERIE HECHA').click();
+window.document.querySelector('button[aria-label="Marcar completada"]').click();
 await flush();
 check('a live record appears immediately', window.document.body.textContent.includes('NUEVO RÉCORD'));
 check('same-weight repetition record is explained', window.document.body.textContent.includes('Más reps con este peso'));
@@ -58,15 +65,14 @@ check('record celebration has confetti and a prominent continue action',
 window.document.querySelector('[aria-label="Cerrar aviso de récord"]').click();
 await flush();
 check('record remains visible on the completed set',
-  window.document.body.textContent.includes('RÉCORD PERSONAL EN ESTA SERIE') &&
-  window.document.querySelector('#workout-sets-overview')?.textContent.includes('★ RÉCORD'));
-button('SERIE HECHA ✓ · DESMARCAR').click();
+  window.document.body.textContent.includes('RÉCORD PERSONAL'));
+window.document.querySelector('button[aria-label="Desmarcar"]').click();
 await flush();
-button('MARCAR SERIE HECHA').click();
+window.document.querySelector('button[aria-label="Marcar completada"]').click();
 await flush();
 check('marking the same performance again does not repeat the alert',
   !window.document.body.textContent.includes('NUEVO RÉCORD'));
-window.document.querySelector('[aria-label="Aumentar Repeticiones"]').click();
+setNumber(repsInput(), 10);
 await new Promise(resolve => setTimeout(resolve, 900));
 check('improving an already completed set also celebrates a record',
   window.document.body.textContent.includes('NUEVO RÉCORD PERSONAL'));

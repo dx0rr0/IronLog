@@ -12,9 +12,11 @@ App personal para registrar entrenamientos: rutinas, series con RIR, autorrellen
 
 Consulta [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) para las dependencias entre capas y el flujo de datos. `dist/` y `node_modules/` son archivos generados y no se versionan.
 
-## Cambio pendiente de despliegue
+## Cambios de la versión 1.6.0 (pendiente de despliegue)
 
-- Desde el detalle de un entrenamiento pasado, **Guardar como rutina** abre una rutina nueva con los ejercicios, descansos y series completadas. Copia los rangos de repeticiones existentes o propone uno alrededor de las repeticiones realizadas; el RIR real queda como objetivo editable. Los pesos siguen en el historial y se sugieren al iniciar la rutina. Los ejercicios archivados no se incluyen.
+- El entrenamiento vuelve a mostrar todos los ejercicios y series a la vez. Ghost y récords siguen disponibles en cada serie.
+- El buscador de ejercicios permite crear uno desde una sesión activa o el editor de rutinas. Se guarda en el catálogo local y se añade a la sesión o plantilla.
+- El descanso guarda su hora de finalización con la sesión. Al volver a la app, el contador refleja el tiempo transcurrido. Si el sistema permite notificaciones y el usuario concede permiso, muestra un aviso con la hora de fin. Una PWA no puede garantizar un aviso justo al terminar si el sistema la suspende o cierra.
 
 ## Cambios de la versión 1.5.0
 
@@ -28,7 +30,6 @@ La versión 1.5.0 ya está desplegada en Vercel. Los cambios posteriores se desp
 
 ## Cambios de la versión 1.4.0
 
-- Modo serie para centrarse en una serie, ajustar el resultado real y avanzar a la siguiente.
 - Propuesta **Ghost** antes de cada serie de fuerza. Usa series completadas del mismo ejercicio y prefiere la misma rutina. Si se alcanza el tope de repeticiones con el RIR previsto, propone un pequeño aumento de peso; en otros casos propone una repetición más o consolidar. Tiene en cuenta errores de ghosts anteriores y la serie previa del día. Siempre es una sugerencia: al marcar la serie se guarda el resultado real, no el ghost.
 - Comparación con la última sesión de la misma rutina y consulta de la última general cuando difieren.
 - Resumen tras guardar, con lo realizado y una propuesta inicial para la próxima vez.

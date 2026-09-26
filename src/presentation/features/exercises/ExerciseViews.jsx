@@ -141,12 +141,21 @@ export function NewExerciseForm({ onSave, onCancel }) {
   const [type, setType] = useState('weight_reps');
   const [distanceUnit, setDistanceUnit] = useState('km');
   const [error, setError] = useState('');
+  const [saving, setSaving] = useState(false);
 
-  const submit = () => {
+  const submit = async () => {
+    if (saving) return;
     if (!name.trim()) { setError('Pon un nombre al ejercicio'); return; }
     const ex = { name: name.trim(), category, muscleGroup, equipment: equipment.trim() || 'Otros', type };
     if (type === 'distance_duration') ex.distanceUnit = distanceUnit;
-    onSave(ex);
+    setSaving(true);
+    try {
+      if (!await onSave(ex)) setError('No se pudo guardar el ejercicio. Reinténtalo.');
+    } catch {
+      setError('No se pudo guardar el ejercicio. Reinténtalo.');
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
@@ -189,8 +198,8 @@ export function NewExerciseForm({ onSave, onCancel }) {
             {error}
           </div>
         )}
-        <button onClick={submit} className="w-full bg-lime-300 text-zinc-950 py-3 rounded-full font-bold hover:bg-lime-400 transition mt-4">
-          GUARDAR EJERCICIO
+          <button onClick={submit} disabled={saving} className="w-full bg-lime-300 disabled:bg-zinc-700 disabled:text-zinc-400 text-zinc-950 py-3 rounded-full font-bold hover:bg-lime-400 transition mt-4">
+            {saving ? 'GUARDANDO...' : 'GUARDAR EJERCICIO'}
         </button>
       </div>
     </div>

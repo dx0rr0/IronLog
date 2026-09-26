@@ -1,10 +1,11 @@
 import { DurField } from '../../shared/DurField.jsx';
 import { ExercisePicker } from '../../shared/ExercisePicker.jsx';
+import { NewExerciseForm } from '../exercises/ExerciseViews.jsx';
 import React from 'react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { exerciseComparisons, predictGhost, summarizeSession } from '../../../domain/training/workout-intelligence.js';
 import { computePlates, epley, findLastEntryForExercise, inheritSet, platesSummary } from '../../../domain/exercises/exercise-utils.js';
-import { ArrowDown, ArrowLeft, ArrowUp, Check, ChevronDown, ChevronLeft, ChevronRight, Dumbbell, Edit2, MessageSquare, Pencil, Play, Plus, RotateCcw, Save, Search, SkipForward, Timer, Trash2, X } from 'lucide-react';
+import { ArrowDown, ArrowLeft, ArrowUp, Check, ChevronDown, Dumbbell, Edit2, MessageSquare, Pencil, Play, Plus, RotateCcw, Save, SkipForward, Timer, Trash2, X } from 'lucide-react';
 import { completedSets, sessionVolume } from '../../../domain/training/session-utils.js';
 import { routineDraftFromSession } from '../../../domain/training/routine-from-session.js';
 import { fmtDur, formatLong, formatShort, formatTime, parseDur, sessionDuration } from '../../shared/formatters.js';
@@ -12,41 +13,27 @@ import { MUSCLE_GROUPS, exerciseMatches } from '../../../domain/exercises/catalo
 import { detectSetRecords } from '../../../domain/training/records.js';
 import { volumeComparison } from '../../../domain/training/motivation.js';
 import { GoalCelebration, RecordCelebration } from '../motivation/MotivationUI.jsx';
+import { adjustRestTimer, createRestTimer, restSecondsLeft } from '../../../domain/training/rest-timer.js';
+import { closeRestNotification, showRestNotification } from '../../../infrastructure/notifications/rest-notification.js';
 
-export function WorkoutSession({ mode, session, setSession, exercises, exMap, onFinish, onCancel, previousSessions, plateConfig, showConfirm, finishing = false }) {
+export function WorkoutSession({ mode, session, setSession, exercises, exMap, onCreateExercise, onFinish, onCancel, previousSessions, plateConfig, showConfirm, finishing = false }) {
   const [pickerOpen, setPickerOpen] = useState(false);
+  const [creatingExercise, setCreatingExercise] = useState(false);
   const [editingName, setEditingName] = useState(false);
-  const [focusMode, setFocusMode] = useState(mode !== 'edit');
-  const [showSetOverview, setShowSetOverview] = useState(true);
-  const [focusIndex, setFocusIndex] = useState(() => {
-    const sets = session.entries.flatMap(entry => entry.sets);
-    const firstOpen = sets.findIndex(set => !set.done);
-    return firstOpen >= 0 ? firstOpen : 0;
-  });
   const [inputError, setInputError] = useState('');
   const [recordAlert, setRecordAlert] = useState(null);
   const closeRecordAlert = useCallback(() => setRecordAlert(null), []);
   const recordEditTimer = useRef(null);
   useEffect(() => () => clearTimeout(recordEditTimer.current), []);
   const [elapsed, setElapsed] = useState(0);
-  const [restTimer, setRestTimer] = useState(null); // { secondsLeft, total, exerciseName }
-  const [showSessionNotes, setShowSessionNotes] = useState(!!session.notes);
   const isEdit = mode === 'edit';
-  const positions = session.entries.flatMap((entry, entryIdx) =>
-    entry.sets.map((_, setIdx) => ({ entryIdx, setIdx })));
-  const safeFocusIndex = Math.min(focusIndex, Math.max(0, positions.length - 1));
-  const focusedPosition = positions[safeFocusIndex];
-  const focusedEntry = focusedPosition ? session.entries[focusedPosition.entryIdx] : null;
-  const focusedExercise = focusedEntry ? exMap[focusedEntry.exerciseId] : null;
-  const focusedSet = focusedPosition ? focusedEntry?.sets[focusedPosition.setIdx] : null;
-  const focusedGhost = focusedSet?.done ? focusedSet.ghost || null
-    : focusedExercise && focusedSet ? predictGhost({
-      exercise: focusedExercise, setIndex: focusedPosition.setIdx,
-      sessions: previousSessions, routineId: session.routineId,
-      targetSet: focusedSet, currentEntry: focusedEntry,
-    }) : null;
-  const focusedComparison = focusedExercise
-    ? exerciseComparisons(previousSessions, focusedExercise.id, session.routineId) : null;
+  const [now, setNow] = useState(Date.now);
+  const [pageVisible, setPageVisible] = useState(() => document.visibilityState === 'visible');
+  const [notificationEnabled, setNotificationEnabled] = useState(() =>
+    typeof Notification !== 'undefined' && Notification.permission === 'granted');
+  const restTimer = isEdit ? null : session.restTimer;
+  const restRemaining = restSecondsLeft(restTimer, now);
+  const [showSessionNotes, setShowSessionNotes] = useState(!!session.notes);
 
   // Live timer (active mode only)
   useEffect(() => {
@@ -60,37 +47,69 @@ export function WorkoutSession({ mode, session, setSession, exercises, exMap, on
     return () => clearInterval(i);
   }, [session.startedAt, session.duration, isEdit]);
 
-  // Rest countdown
+  // Wall-clock deadline survives throttled background tabs and app restarts.
   useEffect(() => {
-    if (!restTimer || restTimer.secondsLeft <= 0) return;
-    const i = setInterval(() => {
-      setRestTimer(rt => {
-        if (!rt) return null;
-        if (rt.secondsLeft <= 1) {
-          // Beep at end
-          tryBeep();
-          return null;
-        }
-        return { ...rt, secondsLeft: rt.secondsLeft - 1 };
-      });
-    }, 1000);
-    return () => clearInterval(i);
-  }, [restTimer]);
+    const tick = () => {
+      setNow(Date.now());
+      setPageVisible(document.visibilityState === 'visible');
+    };
+    const interval = setInterval(tick, 1000);
+    document.addEventListener('visibilitychange', tick);
+    window.addEventListener('focus', tick);
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener('visibilitychange', tick);
+      window.removeEventListener('focus', tick);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!restTimer || restRemaining > 0 || !pageVisible) return;
+    setSession(current => current.restTimer?.endsAt === restTimer.endsAt
+      ? { ...current, restTimer: null } : current);
+    void closeRestNotification();
+    if (now - restTimer.endsAt < 15000) tryBeep();
+  }, [restTimer, restRemaining, pageVisible, now, setSession]);
+
+  useEffect(() => {
+    if (isEdit || !restTimer || restSecondsLeft(restTimer) === 0 ||
+        typeof Notification === 'undefined' || Notification.permission !== 'granted') return;
+    void showRestNotification(restTimer).then(setNotificationEnabled);
+  // A restored session needs to restore its notification once on mount.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => () => { void closeRestNotification(); }, []);
+
+  const beginRest = (seconds, exerciseName) => {
+    if (seconds <= 0) return;
+    const timer = createRestTimer(seconds, exerciseName);
+    setNow(Date.now());
+    setSession(current => ({ ...current, restTimer: timer }));
+    void showRestNotification(timer, true).then(setNotificationEnabled);
+  };
 
   const startRest = (exerciseId) => {
     const entry = session.entries.find(e => e.exerciseId === exerciseId);
     const ex = exMap[exerciseId];
     const seconds = entry?.restSeconds || 0;
     if (seconds <= 0) return;
-    setRestTimer({ secondsLeft: seconds, total: seconds, exerciseName: ex?.name || '' });
+    beginRest(seconds, ex?.name || '');
   };
 
-  const dismissRest = () => setRestTimer(null);
-  const adjustRest = (delta) => setRestTimer(rt => rt ? { ...rt, secondsLeft: Math.max(0, rt.secondsLeft + delta) } : null);
+  const dismissRest = () => {
+    setSession(current => ({ ...current, restTimer: null }));
+    void closeRestNotification();
+  };
+  const adjustRest = delta => {
+    const timer = adjustRestTimer(restTimer, delta);
+    setNow(Date.now());
+    setSession(current => ({ ...current, restTimer: timer }));
+    if (timer) void showRestNotification(timer).then(setNotificationEnabled);
+    else void closeRestNotification();
+  };
 
   const addExercise = ex => {
-    setFocusIndex(positions.length);
-    setFocusMode(true);
     setSession(s => {
       const last = findLastEntryForExercise(ex.id, previousSessions);
       // If we found history, mirror the previous session's set count and
@@ -191,27 +210,10 @@ export function WorkoutSession({ mode, session, setSession, exercises, exMap, on
       // Trigger rest timer if exercise has restSeconds
       if (entry?.restSeconds > 0) {
         const ex = exMap[entry.exerciseId];
-        setRestTimer({ secondsLeft: entry.restSeconds, total: entry.restSeconds, exerciseName: ex?.name || '' });
+        beginRest(entry.restSeconds, ex?.name || '');
       }
     }
     return true;
-  };
-
-  const completeFocusedSet = () => {
-    if (!focusedPosition || !updateSet(focusedPosition.entryIdx, focusedPosition.setIdx, { done: true })) return;
-    const next = positions.findIndex((pos, index) => index > safeFocusIndex &&
-      !session.entries[pos.entryIdx].sets[pos.setIdx].done);
-    const earlier = positions.findIndex((pos, index) => index < safeFocusIndex &&
-      !session.entries[pos.entryIdx].sets[pos.setIdx].done);
-    if (next >= 0) setFocusIndex(next);
-    else if (earlier >= 0) setFocusIndex(earlier);
-  };
-
-  const addFocusedSet = () => {
-    if (!focusedPosition) return;
-    const nextEntry = positions.findIndex(pos => pos.entryIdx > focusedPosition.entryIdx);
-    setFocusIndex(nextEntry >= 0 ? nextEntry : positions.length);
-    addSet(focusedPosition.entryIdx);
   };
 
   const addSet = entryIdx => {
@@ -291,12 +293,6 @@ export function WorkoutSession({ mode, session, setSession, exercises, exMap, on
               {session.name} <Edit2 className="w-4 h-4 text-zinc-600 group-hover:text-zinc-400" />
             </button>
           )}
-          {!isEdit && (
-            <button onClick={() => setFocusMode(value => !value)}
-              className="mt-2 text-[11px] font-bold text-lime-300 border border-lime-300/30 rounded-full px-3 py-1">
-              {focusMode ? 'VER ENTRENAMIENTO COMPLETO' : 'MODO SERIE'}
-            </button>
-          )}
           {isEdit && (
             <div className="mt-2">
               <input
@@ -311,59 +307,6 @@ export function WorkoutSession({ mode, session, setSession, exercises, exMap, on
       </header>
 
       <div className="flex-1 p-5 space-y-4">
-        {focusMode && !isEdit ? (
-          <>
-            {positions.length > 0 && (
-              <FocusedSetsOverview
-                entries={session.entries}
-                exMap={exMap}
-                activeEntryIndex={focusedPosition?.entryIdx}
-                activeSetIndex={focusedPosition?.setIdx}
-                open={showSetOverview}
-                onToggle={() => setShowSetOverview(value => !value)}
-                onSelect={(entryIdx, setIdx) => {
-                  const index = positions.findIndex(pos => pos.entryIdx === entryIdx && pos.setIdx === setIdx);
-                  if (index >= 0) {
-                    setFocusIndex(index);
-                    requestAnimationFrame(() => document.getElementById('focused-set-editor')?.scrollIntoView?.({
-                      behavior: 'smooth', block: 'start',
-                    }));
-                  }
-                }}
-              />
-            )}
-            {focusedPosition && focusedExercise && focusedSet ? (
-              <FocusSetCard
-                key={`${focusedPosition.entryIdx}-${focusedPosition.setIdx}`}
-                entry={focusedEntry}
-                exercise={focusedExercise}
-                set={focusedSet}
-                setIndex={focusedPosition.setIdx}
-                position={safeFocusIndex}
-                total={positions.length}
-                completed={positions.filter(pos => session.entries[pos.entryIdx].sets[pos.setIdx].done).length}
-                ghost={focusedGhost}
-                comparison={focusedComparison}
-                error={inputError}
-                onPrevious={() => setFocusIndex(Math.max(0, safeFocusIndex - 1))}
-                onNext={() => setFocusIndex(Math.min(positions.length - 1, safeFocusIndex + 1))}
-                onUpdate={patch => updateSet(focusedPosition.entryIdx, focusedPosition.setIdx, patch)}
-                onComplete={completeFocusedSet}
-                onAddSet={addFocusedSet}
-              />
-            ) : (
-              <div className="text-center py-12 text-zinc-500">
-                <Dumbbell className="w-10 h-10 mx-auto mb-3 opacity-40" />
-                <div>Añade un ejercicio para empezar.</div>
-              </div>
-            )}
-            <button onClick={() => setPickerOpen(true)}
-              className="w-full border-2 border-dashed border-zinc-700 rounded-2xl py-4 text-zinc-400 font-bold">
-              <Plus className="w-4 h-4 inline mr-1" /> AÑADIR EJERCICIO
-            </button>
-          </>
-        ) : (
-        <>
         {inputError && <div role="alert" className="text-xs text-red-300">{inputError}</div>}
         {session.entries.length === 0 && (
           <div className="text-center py-12 text-zinc-500">
@@ -431,19 +374,36 @@ export function WorkoutSession({ mode, session, setSession, exercises, exMap, on
             </div>
           )}
         </div>
-        </>
-        )}
+
       </div>
 
       {pickerOpen && (
-        <ExercisePicker exercises={exercises} onPick={addExercise} onClose={() => setPickerOpen(false)} />
+        <ExercisePicker exercises={exercises} onPick={addExercise} onClose={() => setPickerOpen(false)}
+          onCreate={() => { setPickerOpen(false); setCreatingExercise(true); }} />
       )}
+      {creatingExercise && <div className="fixed inset-0 z-50 overflow-y-auto bg-zinc-950">
+        <div className="max-w-md mx-auto">
+          <NewExerciseForm onCancel={() => { setCreatingExercise(false); setPickerOpen(true); }}
+            onSave={async values => {
+              const created = await onCreateExercise(values);
+              if (created) {
+                addExercise(created);
+                setCreatingExercise(false);
+              }
+              return created;
+            }} />
+        </div>
+      </div>}
 
       <RecordCelebration alert={recordAlert} onClose={closeRecordAlert} />
 
-      {restTimer && (
+      {restTimer && restRemaining > 0 && (
         <RestTimerWidget
-          timer={restTimer}
+          timer={{ ...restTimer, secondsLeft: restRemaining }}
+          notificationEnabled={notificationEnabled}
+          onEnableNotification={() => {
+            void showRestNotification(restTimer, true).then(setNotificationEnabled);
+          }}
           onDismiss={dismissRest}
           onAdjust={adjustRest}
         />
@@ -468,179 +428,6 @@ export function setBrief(set, type) {
   if (type === 'reps') return `${set.reps ?? '—'} reps${set.rir != null ? ` @${set.rir}` : ''}`;
   if (type === 'distance_duration') return `${set.distance ?? '—'} · ${set.duration ? fmtDur(set.duration) : '—'}`;
   return set.duration ? fmtDur(set.duration) : '—';
-}
-
-export function firstComparableSet(item, index) {
-  if (!item) return null;
-  return item.entry.sets[index]?.done ? item.entry.sets[index]
-    : item.entry.sets.find(set => set.done) || null;
-}
-
-export function StepperField({ label, value, onChange, step = 1, min = 0, unit = '' }) {
-  const change = delta => {
-    const next = Number((Math.max(min, (Number(value) || 0) + delta)).toFixed(2));
-    onChange(next);
-  };
-  return (
-    <div className="bg-zinc-800 rounded-xl p-3">
-      <div className="text-[10px] uppercase tracking-wider font-bold text-zinc-400 mb-2">{label}</div>
-      <div className="flex items-center gap-2">
-        <button onClick={() => change(-step)} aria-label={`Reducir ${label}`}
-          className="w-11 h-11 bg-zinc-700 rounded-lg text-xl font-bold shrink-0">−</button>
-        <input type="number" inputMode={step % 1 ? 'decimal' : 'numeric'} step="any"
-          value={value ?? ''} onChange={e => onChange(e.target.value === '' ? '' : Number(e.target.value))}
-          className="min-w-0 w-full bg-zinc-950 border border-zinc-700 rounded-lg text-center font-mono text-xl h-11 outline-none focus:border-lime-300"
-          aria-label={label} />
-        <button onClick={() => change(step)} aria-label={`Aumentar ${label}`}
-          className="w-11 h-11 bg-zinc-700 rounded-lg text-xl font-bold shrink-0">+</button>
-      </div>
-      {unit && <div className="text-[10px] text-zinc-500 text-center mt-1">{unit}</div>}
-    </div>
-  );
-}
-
-export function FocusedSetsOverview({ entries, exMap, activeEntryIndex, activeSetIndex, open, onToggle, onSelect }) {
-  const completed = entries.reduce((count, entry) => count + entry.sets.filter(set => set.done).length, 0);
-  const total = entries.reduce((count, entry) => count + entry.sets.length, 0);
-  return (
-    <section className="bg-zinc-900 border border-zinc-800 rounded-2xl overflow-hidden" aria-label="Series del entrenamiento">
-      <button type="button" onClick={onToggle} aria-expanded={open} aria-controls="workout-sets-overview"
-        className="w-full flex items-center justify-between gap-3 p-4 text-left">
-        <span>
-          <span className="block font-display text-xl text-zinc-100">TUS SERIES</span>
-          <span className="block text-xs text-zinc-400">{completed} de {total} hechas · toca una para verla o corregirla</span>
-        </span>
-        <ChevronDown className={`w-5 h-5 text-zinc-400 shrink-0 transition-transform ${open ? 'rotate-180' : ''}`} />
-      </button>
-      {open && (
-        <div id="workout-sets-overview" className="px-3 pb-3 space-y-3 border-t border-zinc-800 pt-3">
-          {entries.map((entry, entryIdx) => {
-            const exercise = exMap[entry.exerciseId];
-            if (!exercise) return null;
-            return (
-              <div key={entryIdx}>
-                <div className="text-[11px] font-bold text-zinc-400 uppercase tracking-wide px-1 mb-1.5">
-                  {exercise.name}
-                </div>
-                <div className="space-y-1.5">
-                  {entry.sets.map((set, setIdx) => {
-                    const active = entryIdx === activeEntryIndex && setIdx === activeSetIndex;
-                    return (
-                      <button key={setIdx} type="button" onClick={() => onSelect(entryIdx, setIdx)}
-                        aria-label={`Ver serie ${setIdx + 1} de ${exercise.name}`}
-                        aria-current={active ? 'step' : undefined}
-                        aria-controls="focused-set-editor"
-                        className={`w-full flex items-center gap-2 rounded-xl border px-3 py-2 text-left transition ${active
-                          ? 'border-lime-300 bg-lime-300/10'
-                          : 'border-zinc-800 bg-zinc-950 hover:border-zinc-600'}`}>
-                        <span className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold shrink-0 ${set.done
-                          ? 'bg-lime-300 text-zinc-950' : 'bg-zinc-800 text-zinc-400'}`}>
-                          {setIdx + 1}
-                        </span>
-                        <span className="min-w-0 flex-1 font-mono text-sm text-zinc-100 truncate">
-                          {set.done || validCompletedSet(set, exercise.type)
-                            ? setBrief(set, exercise.type) : 'Sin datos aún'}
-                        </span>
-                        <span className={`text-[10px] font-bold shrink-0 ${set.personalRecords?.length && set.done
-                          ? 'text-amber-300' : set.done ? 'text-lime-300' : 'text-zinc-500'}`}>
-                          {set.done ? (set.personalRecords?.length ? '★ RÉCORD' : 'HECHA') : 'POR HACER'}
-                        </span>
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      )}
-    </section>
-  );
-}
-
-export function FocusSetCard({ entry, exercise, set, setIndex, position, total, completed,
-  ghost, comparison, error, onPrevious, onNext, onUpdate, onComplete, onAddSet }) {
-  const routinePrevious = comparison?.routine;
-  const generalPrevious = comparison?.general;
-  return (
-    <div id="focused-set-editor" className="space-y-4 scroll-mt-36">
-      <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-4">
-        <div className="flex items-center justify-between gap-2">
-          <button onClick={onPrevious} disabled={position === 0} aria-label="Serie anterior"
-            className="p-2 text-zinc-300 disabled:opacity-20"><ChevronLeft className="w-6 h-6" /></button>
-          <div className="text-center min-w-0">
-            <div className="text-[10px] text-zinc-500 font-bold tracking-widest">SERIE {position + 1} DE {total} · {completed} HECHAS</div>
-            <div className="font-display text-2xl text-zinc-100 truncate">{exercise.name.toUpperCase()}</div>
-            <div className="text-xs text-zinc-500">Serie {setIndex + 1} de {entry.sets.length}{entry.restSeconds ? ` · descanso ${fmtDur(entry.restSeconds)}` : ''}</div>
-          </div>
-          <button onClick={onNext} disabled={position >= total - 1} aria-label="Serie siguiente"
-            className="p-2 text-zinc-300 disabled:opacity-20"><ChevronRight className="w-6 h-6" /></button>
-        </div>
-        <div className="h-1.5 bg-zinc-800 rounded-full mt-4 overflow-hidden">
-          <div className="h-full bg-lime-300" style={{ width: `${total ? 100 * completed / total : 0}%` }} />
-        </div>
-      </div>
-
-      {set.done && set.personalRecords?.length > 0 && (
-        <div className="rounded-2xl border border-amber-300/50 bg-amber-300/10 p-4 text-amber-100">
-          <div className="text-[11px] font-bold tracking-[0.18em] text-amber-300">★ RÉCORD PERSONAL EN ESTA SERIE</div>
-          <div className="text-sm mt-1">{set.personalRecords.map(record => `${record.label}: ${record.detail}`).join(' · ')}</div>
-        </div>
-      )}
-
-      {ghost ? (
-        <div className="bg-lime-300/10 border border-lime-300/40 rounded-2xl p-4">
-          <div className="text-[10px] text-lime-300 font-bold tracking-widest mb-1">GHOST · PROPUESTA PARA ESTA SERIE</div>
-          <div className="font-mono text-2xl text-lime-200">{setBrief(ghost, exercise.type)}</div>
-          <div className="text-xs text-zinc-300 mt-2">{ghost.reason}</div>
-          <div className="text-[10px] text-zinc-500 mt-2">Basado en {ghost.scope === 'rutina' ? 'esta rutina' : 'tu historial general'} · {formatShort(ghost.referenceDate)}</div>
-        </div>
-      ) : (
-        <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-4 text-sm text-zinc-400">
-          {['weight_reps', 'reps'].includes(exercise.type)
-            ? 'GHOST: registra este ejercicio para recibir una propuesta la próxima vez.'
-            : 'Ghost de progresión disponible para ejercicios de fuerza.'}
-        </div>
-      )}
-
-      {(routinePrevious || generalPrevious) && (
-        <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-3 text-xs text-zinc-400 space-y-1">
-          {routinePrevious && <div>Última en esta rutina: <span className="text-zinc-100 font-mono">{setBrief(firstComparableSet(routinePrevious, setIndex), exercise.type)}</span></div>}
-          {generalPrevious && generalPrevious.session.id !== routinePrevious?.session.id &&
-            <div>Última general: <span className="text-zinc-100 font-mono">{setBrief(firstComparableSet(generalPrevious, setIndex), exercise.type)}</span></div>}
-        </div>
-      )}
-
-      <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-4 space-y-3">
-        <div>
-          <div className="font-display text-xl">RESULTADO REAL</div>
-          <div className="text-xs text-zinc-500">Confirma o corrige los valores después de hacer la serie.</div>
-        </div>
-        {exercise.type === 'weight_reps' && <StepperField label="Peso" unit="kg" value={set.weight}
-          step={/mancuern/i.test(exercise.equipment) ? 1 : 2.5} onChange={weight => onUpdate({ weight })} />}
-        {['weight_reps', 'reps'].includes(exercise.type) && <>
-          <StepperField label="Repeticiones" value={set.reps} onChange={reps => onUpdate({ reps })} />
-          <StepperField label="RIR" value={set.rir ?? ''} min={0} onChange={rir => onUpdate({ rir: rir === '' ? null : rir })} />
-        </>}
-        {exercise.type === 'distance_duration' && <StepperField label={`Distancia (${exercise.distanceUnit || 'km'})`}
-          value={set.distance} step={0.1} onChange={distance => onUpdate({ distance })} />}
-        {['distance_duration', 'duration'].includes(exercise.type) && <div>
-          <div className="text-xs text-zinc-400 mb-1">Duración</div>
-          <DurField value={set.duration || 0} onChange={duration => onUpdate({ duration })}
-            className="w-full bg-zinc-800 border border-zinc-700 rounded-xl p-3 text-center font-mono text-xl" />
-        </div>}
-        {error && <div role="alert" className="text-xs text-red-300">{error}</div>}
-        {set.done ? (
-          <button onClick={() => onUpdate({ done: false })}
-            className="w-full bg-zinc-800 text-lime-300 rounded-xl py-4 font-bold">SERIE HECHA ✓ · DESMARCAR</button>
-        ) : (
-          <button onClick={onComplete}
-            className="w-full bg-lime-300 text-zinc-950 rounded-xl py-4 text-lg font-bold">MARCAR SERIE HECHA ✓</button>
-        )}
-      </div>
-      <button onClick={onAddSet} className="w-full text-sm text-zinc-400 py-3">+ AÑADIR SERIE A {exercise.name.toUpperCase()}</button>
-    </div>
-  );
 }
 
 // Date input helpers
@@ -700,8 +487,9 @@ export function tryBeep() {
   try { if (navigator.vibrate) navigator.vibrate([200, 80, 200]); } catch {}
 }
 
-export function RestTimerWidget({ timer, onDismiss, onAdjust }) {
+export function RestTimerWidget({ timer, notificationEnabled, onEnableNotification, onDismiss, onAdjust }) {
   const pct = timer.total > 0 ? ((timer.total - timer.secondsLeft) / timer.total) * 100 : 0;
+  const endTime = new Date(timer.endsAt).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
   return (
     <div className="fixed bottom-4 left-1/2 -translate-x-1/2 max-w-md w-[calc(100%-1rem)] bg-zinc-900 border border-lime-300/40 rounded-2xl shadow-2xl shadow-lime-300/10 z-40 anim-slide-up overflow-hidden">
       <div className="absolute inset-x-0 top-0 h-1 bg-zinc-800">
@@ -715,6 +503,12 @@ export function RestTimerWidget({ timer, onDismiss, onAdjust }) {
           <div className="text-[10px] text-zinc-500 uppercase tracking-wider font-bold">DESCANSO</div>
           <div className="font-mono text-2xl text-lime-300 leading-none">{fmtDur(timer.secondsLeft)}</div>
           {timer.exerciseName && <div className="text-[10px] text-zinc-500 truncate mt-0.5">{timer.exerciseName}</div>}
+          <div className="text-[10px] text-zinc-400 mt-1">Termina a las {endTime}</div>
+          {!notificationEnabled && typeof Notification !== 'undefined' && Notification.permission !== 'denied' && (
+            <button onClick={onEnableNotification} className="text-[10px] text-lime-300 underline mt-1">
+              Activar aviso fuera de la app
+            </button>
+          )}
         </div>
         <div className="flex items-center gap-1 shrink-0">
           <button onClick={() => onAdjust(-15)} className="bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-xs font-bold rounded-full w-8 h-8 flex items-center justify-center">-15</button>

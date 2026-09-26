@@ -1,4 +1,4 @@
-// End-to-end DOM smoke test for repeat → ghost → completed set → summary.
+// End-to-end DOM smoke test for repeat → full workout → completed set → summary.
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -49,29 +49,19 @@ await flush();
 check('past session offers repeat action', !!button('REPETIR ENTRENAMIENTO'));
 button('REPETIR ENTRENAMIENTO').click();
 await flush();
-check('repeat opens focused set mode', window.document.body.textContent.includes('RESULTADO REAL'));
-const overview = () => window.document.querySelector('#workout-sets-overview');
-check('focused mode lists every set without changing modes', overview()?.querySelectorAll('button[aria-label^="Ver serie"]').length === 2);
+check('repeat opens the full workout', !!button('Añadir serie') && !button('MODO SERIE'));
+check('all sets are editable together', window.document.querySelectorAll('button[aria-label="Marcar completada"]').length === 2);
 check('ghost prefers same routine', window.document.body.textContent.includes('82.5 kg × 8'));
-check('previous set is shown as comparison', window.document.body.textContent.includes('Última en esta rutina'));
-button('MARCAR SERIE HECHA').click();
+check('previous session stays visible as comparison', window.document.body.textContent.includes('Última vez en esta rutina'));
+window.document.querySelector('button[aria-label="Marcar completada"]').click();
 await flush();
-check('completing a set advances focus', window.document.body.textContent.includes('Serie 2 de 2'));
-check('completed set and its actual values stay visible', overview()?.textContent.includes('80 kg × 12 @2') && overview()?.textContent.includes('HECHA'));
-overview().querySelector('button[aria-label^="Ver serie 1"]').click();
-await flush();
-check('tapping a completed set reopens it for review',
-  window.document.querySelector('button[aria-label^="Ver serie 1"]').getAttribute('aria-current') === 'step' &&
-  !!button('SERIE HECHA ✓ · DESMARCAR'));
-overview().querySelector('button[aria-label^="Ver serie 2"]').click();
-await flush();
-check('tapping another set returns to the pending one',
-  window.document.querySelector('button[aria-label^="Ver serie 2"]').getAttribute('aria-current') === 'step' &&
-  !!button('MARCAR SERIE HECHA'));
+check('completed and pending sets remain on the same screen',
+  window.document.querySelectorAll('button[aria-label="Desmarcar"]').length === 1 &&
+  window.document.querySelectorAll('button[aria-label="Marcar completada"]').length === 1);
 button('FIN').click();
 await flush();
 check('finish opens actionable summary', window.document.body.textContent.includes('HOY Y LA PRÓXIMA VEZ'));
 check('summary shows next ghost', window.document.body.textContent.includes('Próximo ghost'));
 check('repeat preserved original session', (await storage.get('sessions')).length === 3);
 
-console.log('12 workout flow runtime checks passed');
+console.log('8 workout flow runtime checks passed');

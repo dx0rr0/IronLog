@@ -2,7 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { Plus, Search, X } from 'lucide-react';
 import { MUSCLE_GROUPS, exerciseMatches } from '../../domain/exercises/catalog.js';
 
-export function ExercisePicker({ exercises, onPick, onClose }) {
+export function ExercisePicker({ exercises, onPick, onClose, onCreate }) {
   const [search, setSearch] = useState('');
   const [cat, setCat] = useState('all');
   const [muscle, setMuscle] = useState('all');
@@ -32,6 +32,9 @@ export function ExercisePicker({ exercises, onPick, onClose }) {
             <X className="w-5 h-5" />
           </button>
           <h2 className="font-display text-2xl flex-1">EJERCICIOS</h2>
+          {onCreate && <button onClick={onCreate} className="text-xs font-bold text-lime-300 flex items-center gap-1">
+            <Plus className="w-4 h-4" /> CREAR
+          </button>}
         </header>
         <div className="shrink-0 px-5 py-3 space-y-3 border-b border-zinc-800">
           <div className="relative">
@@ -84,7 +87,10 @@ export function ExercisePicker({ exercises, onPick, onClose }) {
             </div>
           ))}
           {filtered.length === 0 && (
-            <div className="text-center py-12 text-zinc-500 text-sm">No hay resultados</div>
+            <div className="text-center py-12 text-zinc-500 text-sm">
+              No hay resultados
+              {onCreate && <button onClick={onCreate} className="block mx-auto mt-3 text-lime-300 font-bold">CREAR EJERCICIO</button>}
+            </div>
           )}
         </div>
       </div>

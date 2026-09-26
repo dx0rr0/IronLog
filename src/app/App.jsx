@@ -192,7 +192,8 @@ export default function App() {
     }
     setFinishing(true);
     const duration = Math.round((Date.now() - currentSession.startedAt) / 1000);
-    const finished = { ...currentSession, duration, finishedAt: Date.now() };
+    const { restTimer: _restTimer, ...completedSession } = currentSession;
+    const finished = { ...completedSession, duration, finishedAt: Date.now() };
     const nextSessions = [finished, ...sessions.filter(s => s.id !== finished.id)];
     const saved = await storage.set('sessions', nextSessions);
     const cleared = saved && await storage.del('current-session');
@@ -277,10 +278,17 @@ export default function App() {
     });
   };
 
-  const addCustomExercise = ex => {
-    const id = 'cust_' + Date.now();
-    setCustomExercises(prev => [...prev, { ...ex, id }]);
+  const addCustomExercise = async ex => {
+    const created = { ...ex, id: 'cust_' + (globalThis.crypto?.randomUUID?.()
+      || `${Date.now()}_${Math.random().toString(36).slice(2)}`) };
+    const next = [...customExercises, created];
+    if (!await storage.set('custom-exercises', next)) {
+      setSaveError(true);
+      return null;
+    }
+    setCustomExercises(next);
     showToast('Ejercicio creado ✓');
+    return created;
   };
 
   const deleteCustomExercise = (id) => {
@@ -524,6 +532,7 @@ export default function App() {
               setSession={setCurrentSession}
               exercises={availableExercises}
               exMap={exMap}
+              onCreateExercise={addCustomExercise}
               onFinish={finishSession}
               finishing={finishing}
               onCancel={cancelSession}
@@ -538,6 +547,7 @@ export default function App() {
               setSession={setEditingSession}
               exercises={availableExercises}
               exMap={exMap}
+              onCreateExercise={addCustomExercise}
               onFinish={saveEditedSession}
               onCancel={cancelEditSession}
               previousSessions={sessions.filter(s => s.id !== editingSession.id)}
@@ -572,13 +582,18 @@ export default function App() {
           ) : view?.kind === 'exercise' ? (
             <ExerciseDetail exercise={view.data} sessions={sessions} onBack={() => setView(null)} />
           ) : view?.kind === 'newExercise' ? (
-            <NewExerciseForm onSave={ex => { addCustomExercise(ex); setView(null); }} onCancel={() => setView(null)} />
+            <NewExerciseForm onSave={async ex => {
+              const created = await addCustomExercise(ex);
+              if (created) setView(null);
+              return created;
+            }} onCancel={() => setView(null)} />
           ) : ['newRoutine', 'editRoutine', 'newRoutineFromSession'].includes(view?.kind) ? (
             <RoutineEditor
               initial={view?.kind === 'editRoutine' ? view.data : null}
               draft={view?.kind === 'newRoutineFromSession' ? view.data.draft : null}
               exercises={availableExercises}
               exMap={exMap}
+              onCreateExercise={addCustomExercise}
               onSave={routine => {
                 saveRoutine(routine);
                 if (view?.kind === 'newRoutineFromSession') setTab('routines');
