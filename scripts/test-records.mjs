@@ -18,8 +18,12 @@ ok('more reps at the same load is a record', kinds({ weight: 80, reps: 11 }).inc
 ok('estimated 1RM record is separate from max load', kinds({ weight: 80, reps: 11 }).includes('estimated1RM'));
 ok('a tie is not a record', kinds({ weight: 90, reps: 6 }).length === 0);
 ok('unfinished sets are ignored as historical baselines', kinds({ weight: 110, reps: 2 }).includes('weight'));
-ok('first ever set establishes a baseline without an alert', detectSetRecords({ exercise,
-  set: { weight: 80, reps: 8, done: true } }).length === 0);
+ok('first ever valid set is celebrated as a first mark', detectSetRecords({ exercise,
+  set: { weight: 80, reps: 8, done: true } }).some(record => record.kind === 'first'));
+ok('first mark does not claim a comparative weight record', detectSetRecords({ exercise,
+  set: { weight: 80, reps: 8, done: true } }).every(record => record.kind !== 'weight'));
+ok('an invalid first set is not a mark', detectSetRecords({ exercise,
+  set: { weight: '', reps: 8, done: true } }).length === 0);
 ok('invalid actual values do not create records', kinds({ weight: '', reps: 15 }).length === 0);
 const withinWorkout = detectSetRecords({ exercise, set: { weight: 80, reps: 9, done: true },
   currentSession: { entries: [{ exerciseId: exercise.id, sets: [
@@ -34,5 +38,14 @@ ok('duration record is supported', detectSetRecords({
   exercise: { id: 'plancha', type: 'duration' }, set: { duration: 100, done: true },
   previousSessions: [{ entries: [{ exerciseId: 'plancha', sets: [{ duration: 90, done: true }] }] }],
 }).some(record => record.kind === 'duration'));
+for (const [type, set, detail] of [
+  ['reps', { reps: 10 }, '10 reps'],
+  ['duration', { duration: 60 }, '60 s'],
+  ['distance_duration', { distance: 5, duration: 1200 }, '5 km'],
+]) {
+  ok(`first ${type} result is celebrated`, detectSetRecords({
+    exercise: { id: type, type }, set: { ...set, done: true },
+  }).some(record => record.kind === 'first' && record.detail === detail));
+}
 
 console.log(`\n${count} record checks passed`);

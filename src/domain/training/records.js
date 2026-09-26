@@ -19,14 +19,13 @@ export function detectSetRecords({ exercise, set, previousSessions = [], current
       if ((ei !== entryIndex || si !== setIndex) && item.done) prior.push(item);
     }
   }
-  if (!prior.length) return [];
-
   if (exercise.type === 'weight_reps') {
     const weight = positive(set.weight);
     const reps = positive(set.reps);
     const valid = prior.map(item => ({ weight: positive(item.weight), reps: positive(item.reps) }))
       .filter(item => item.weight && item.reps);
-    if (!weight || !reps || !valid.length) return [];
+    if (!weight || !reps) return [];
+    if (!valid.length) return [{ kind: 'first', label: 'Primera marca', detail: `${weight} kg × ${reps} reps` }];
     const records = [];
     const maxWeight = Math.max(...valid.map(item => item.weight));
     if (greater(weight, maxWeight)) records.push({ kind: 'weight', label: 'Mayor peso', detail: `${weight} kg` });
@@ -43,18 +42,21 @@ export function detectSetRecords({ exercise, set, previousSessions = [], current
   if (exercise.type === 'reps') {
     const reps = positive(set.reps);
     const previous = prior.map(item => positive(item.reps)).filter(Boolean);
+    if (reps && !previous.length) return [{ kind: 'first', label: 'Primera marca', detail: `${reps} reps` }];
     return reps && previous.length && greater(reps, Math.max(...previous))
       ? [{ kind: 'reps', label: 'Más repeticiones', detail: `${reps} reps` }] : [];
   }
   if (exercise.type === 'duration') {
     const duration = positive(set.duration);
     const previous = prior.map(item => positive(item.duration)).filter(Boolean);
+    if (duration && !previous.length) return [{ kind: 'first', label: 'Primera marca', detail: `${duration} s` }];
     return duration && previous.length && greater(duration, Math.max(...previous))
       ? [{ kind: 'duration', label: 'Mayor duración', detail: `${duration} s` }] : [];
   }
   if (exercise.type === 'distance_duration') {
     const distance = positive(set.distance);
     const previous = prior.map(item => positive(item.distance)).filter(Boolean);
+    if (distance && !previous.length) return [{ kind: 'first', label: 'Primera marca', detail: `${distance} ${exercise.distanceUnit || 'km'}` }];
     return distance && previous.length && greater(distance, Math.max(...previous))
       ? [{ kind: 'distance', label: 'Mayor distancia', detail: `${distance} ${exercise.distanceUnit || 'km'}` }] : [];
   }

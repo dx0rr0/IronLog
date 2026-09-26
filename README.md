@@ -17,6 +17,7 @@ Consulta [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) para las dependencias entr
 - El entrenamiento vuelve a mostrar todos los ejercicios y series a la vez. Ghost y récords siguen disponibles en cada serie.
 - El buscador de ejercicios permite crear uno desde una sesión activa o el editor de rutinas. Se guarda en el catálogo local y se añade a la sesión o plantilla.
 - El descanso guarda su hora de finalización con la sesión. Al volver a la app, el contador refleja el tiempo transcurrido. Si el sistema permite notificaciones y el usuario concede permiso, muestra un aviso con la hora de fin. Una PWA no puede garantizar un aviso justo al terminar si el sistema la suspende o cierra.
+- La primera serie completada de un ejercicio sin historial se celebra como **Primera marca**. Las series posteriores siguen detectando mejoras de peso, repeticiones y otras métricas.
 
 ## Cambios de la versión 1.5.0
 
