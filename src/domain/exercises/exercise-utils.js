@@ -55,6 +55,20 @@ export function inheritSet(ex, prevSet, routineTargets) {
   return out;
 }
 
+// Swap an entry's exercise in place: keep its position, superset, rest and
+// set count/targets; values come from the new exercise's own history.
+export function swapEntryExercise(entry, ex, sessions) {
+  const last = findLastEntryForExercise(ex.id, sessions);
+  const count = Math.max(1, entry.sets?.length || 0);
+  const sets = Array.from({ length: count }, (_, i) => {
+    const current = entry.sets?.[i] || {};
+    const prev = last?.sets?.[i]?.done ? last.sets[i] : null;
+    return inheritSet(ex, prev, { repsMin: current.repsMin ?? null, repsMax: current.repsMax ?? null,
+      ...(current.rir != null ? { rir: current.rir } : {}) });
+  });
+  return { ...entry, exerciseId: ex.id, notes: '', sets };
+}
+
 // Locate the most recent session that contains this exercise. `sessions`
 // is expected newest-first (which is how we store and import them).
 export function findLastEntryForExercise(exerciseId, sessions) {

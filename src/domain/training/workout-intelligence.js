@@ -1,5 +1,7 @@
 import { inheritSet } from '../exercises/exercise-utils.js';
 import { completedSets, sessionVolume } from './session-utils.js';
+import { normalizeSupersets } from './supersets.js';
+import { DEFAULT_REST_SECONDS } from './training-defaults.js';
 
 const positive = value => Number.isFinite(Number(value)) && Number(value) > 0
   ? Number(value) : null;
@@ -16,10 +18,16 @@ export function exerciseComparisons(sessions, exerciseId, routineId) {
     scope: routine ? 'rutina' : 'general' };
 }
 
-function matchingSet(entry, setIndex) {
+export function matchingSet(entry, setIndex) {
   const sets = entry?.sets || [];
-  return sets[setIndex]?.done === true ? sets[setIndex]
-    : [...sets].reverse().find(set => set.done === true) || null;
+  return sets[setIndex]?.done === true ? sets[setIndex] : null;
+}
+
+export function exerciseHistory(sessions, exerciseId) {
+  return (sessions || []).flatMap(session => (session.entries || [])
+    .flatMap((entry, entryIndex) => entry.exerciseId === exerciseId && completedSets(entry).length
+      ? [{ session, entry, entryIndex }] : []))
+    .sort((a, b) => new Date(b.session.date) - new Date(a.session.date));
 }
 
 function weightStep(equipment) {
@@ -126,12 +134,13 @@ export function repeatSession(source, exMap, now = Date.now()) {
     notes: '',
     routineId: source.routineId || null,
     sourceSessionId: source.id,
-    entries: (source.entries || []).filter(entry => exMap[entry.exerciseId]).map(entry => ({
+    entries: normalizeSupersets((source.entries || []).filter(entry => exMap[entry.exerciseId]).map(entry => ({
       exerciseId: entry.exerciseId,
-      restSeconds: entry.restSeconds || 0,
-      notes: entry.notes || '',
+      ...(entry.supersetId ? { supersetId: entry.supersetId } : {}),
+      restSeconds: entry.restSeconds ?? DEFAULT_REST_SECONDS,
+      notes: '',
       sets: (entry.sets || []).map(set => inheritSet(exMap[entry.exerciseId], set, null)),
-    })),
+    }))),
   };
 }
 

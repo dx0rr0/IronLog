@@ -1,7 +1,9 @@
 import React from 'react';
+import { useBackLayer } from '../shared/BrowserNavigation.jsx';
 import { AlertTriangle, Calendar as CalendarIcon, ClipboardList, Dumbbell, Home, Play, Settings, TrendingUp } from 'lucide-react';
 
 export function ConfirmDialog({ title, body, confirmLabel = 'Aceptar', cancelLabel = 'Cancelar', danger, hideCancel, onConfirm, onClose }) {
+  useBackLayer(true, onClose);
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center p-5 bg-zinc-950/70 backdrop-blur-sm anim-fade" onClick={onClose}>
       <div

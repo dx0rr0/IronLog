@@ -1,6 +1,7 @@
 import { SessionCard } from '../../shared/SessionCard.jsx';
 import React from 'react';
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { useBackLayer } from '../../shared/BrowserNavigation.jsx';
 import { Activity, Award, Clock, Dumbbell, Flame, Play, Plus, Trash2, X } from 'lucide-react';
 import { bodyWeightDelta } from '../../../domain/exercises/exercise-utils.js';
 import { Area, AreaChart, ResponsiveContainer, YAxis } from 'recharts';
@@ -219,6 +220,7 @@ export function BodyWeightCard({ bodyWeights, onOpen }) {
 }
 
 export function BodyWeightModal({ bodyWeights, onSave, onDelete, showConfirm, onClose }) {
+  useBackLayer(true, onClose);
   // Default the input to last value (so user just adjusts), or empty if first.
   const last = bodyWeights[0];
   const [value, setValue] = useState(last ? String(last.kg) : '');

@@ -1,4 +1,6 @@
+import { DEFAULT_REST_SECONDS } from './training-defaults.js';
 import { completedSets } from './session-utils.js';
+import { normalizeSupersets } from './supersets.js';
 
 const positiveInteger = value => {
   if (value == null || value === '') return null;
@@ -32,15 +34,16 @@ const targetsFromSet = (set, exercise) => {
 export const routineDraftFromSession = (session, exMap) => ({
   name: session?.name?.trim() || 'Entrenamiento',
   notes: '',
-  exercises: (session?.entries || []).flatMap(entry => {
+  exercises: normalizeSupersets((session?.entries || []).flatMap(entry => {
     const exercise = exMap[entry.exerciseId];
     const sets = completedSets(entry);
     if (!exercise || exercise.hidden || sets.length === 0) return [];
     return [{
       exerciseId: entry.exerciseId,
-      restSeconds: entry.restSeconds || 0,
+      ...(entry.supersetId ? { supersetId: entry.supersetId } : {}),
+      restSeconds: entry.restSeconds ?? DEFAULT_REST_SECONDS,
       notes: entry.notes || '',
       sets: sets.map(set => targetsFromSet(set, exercise)),
     }];
-  }),
+  })),
 });

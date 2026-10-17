@@ -109,8 +109,10 @@ export const DEFAULT_EXERCISES = [
 
 export const searchText = value => String(value || '').normalize('NFD')
   .replace(/[\u0300-\u036f]/g, '').toLowerCase();
-export const exerciseMatches = (exercise, search) => !search ||
-  searchText([exercise.name, exercise.equipment, ...(exercise.aliases || [])].join(' '))
-    .includes(searchText(search));
+export const exerciseMatches = (exercise, search) => {
+  const text = searchText([exercise.name, exercise.equipment, exercise.muscleGroup,
+    MUSCLE_GROUPS[exercise.muscleGroup], ...(exercise.aliases || [])].join(' '));
+  return searchText(search).trim().split(/\s+/).every(word => text.includes(word));
+};
 export const availableRoutineEntries = (routine, exMap) =>
   (routine.exercises || []).filter(re => exMap[re.exerciseId] && !exMap[re.exerciseId].hidden);

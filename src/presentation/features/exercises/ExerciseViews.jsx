@@ -2,8 +2,9 @@ import { Select } from '../../shared/Select.jsx';
 import { ChartCard } from '../../shared/ChartCard.jsx';
 import React from 'react';
 import { useMemo, useState } from 'react';
-import { Activity, ArrowLeft, Award, ChevronDown, Plus, Search, Trash2 } from 'lucide-react';
+import { Activity, ArrowLeft, Award, ChevronDown, MessageSquare, Plus, Search, Trash2 } from 'lucide-react';
 import { completedSets } from '../../../domain/training/session-utils.js';
+import { exerciseHistory } from '../../../domain/training/workout-intelligence.js';
 import { epley } from '../../../domain/exercises/exercise-utils.js';
 import { Area, AreaChart, Bar, BarChart, CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { MUSCLE_GROUPS, TYPE_LABELS, exerciseMatches } from '../../../domain/exercises/catalog.js';
@@ -59,7 +60,7 @@ export function ExercisesView({ exercises, customExercises, onOpen, onNew, onDel
           <input
             value={search}
             onChange={e => setSearch(e.target.value)}
-            placeholder="Buscar ejercicio..."
+            placeholder="Buscar ejercicio o grupo muscular..."
             className="w-full bg-zinc-900 border border-zinc-800 rounded-lg pl-9 pr-3 py-2.5 text-sm focus:border-lime-300/50 outline-none"
           />
         </div>
@@ -97,7 +98,7 @@ export function ExercisesView({ exercises, customExercises, onOpen, onNew, onDel
                         {isCustom && <span className="text-[9px] bg-lime-300/20 text-lime-300 px-1.5 py-0.5 rounded font-bold">CUSTOM</span>}
                       </div>
                       <div className="text-[10px] text-zinc-500 uppercase tracking-wide">
-                        {e.equipment} • {TYPE_LABELS[e.type]}
+                        {MUSCLE_GROUPS[e.muscleGroup] || e.muscleGroup} • {e.equipment} • {TYPE_LABELS[e.type]}
                       </div>
                     </button>
                     {isCustom && (
@@ -221,14 +222,7 @@ export function Field({ label, children }) {
 // ============================================================
 
 export function ExerciseDetail({ exercise, sessions, onBack }) {
-  const history = useMemo(() => {
-    const out = [];
-    sessions.forEach(s => {
-      const e = s.entries?.find(x => x.exerciseId === exercise.id);
-      if (e && completedSets(e).length) out.push({ session: s, entry: e });
-    });
-    return out;
-  }, [sessions, exercise.id]);
+  const history = useMemo(() => exerciseHistory(sessions, exercise.id), [sessions, exercise.id]);
 
   const stats = useMemo(() => computeExerciseStats(exercise, history), [exercise, history]);
 
@@ -265,10 +259,19 @@ export function ExerciseDetail({ exercise, sessions, onBack }) {
                       <div className="text-[10px] text-zinc-600">{completedSets(entry).length} series</div>
                     </div>
                     <div className="flex flex-wrap gap-1.5">
-                      {completedSets(entry).map((s, si) => (
-                        <SetPill key={si} set={s} type={exercise.type} unit={exercise.distanceUnit} />
+                      {entry.sets.map((s, si) => s.done && (
+                        <div key={si} className="flex items-center gap-1">
+                          <span className="text-[10px] text-zinc-500">#{si + 1}</span>
+                          <SetPill set={s} type={exercise.type} unit={exercise.distanceUnit} />
+                        </div>
                       ))}
                     </div>
+                    {entry.notes?.trim() && (
+                      <div className="mt-2 flex gap-1.5 text-xs text-zinc-300 bg-zinc-800/50 rounded-lg px-2.5 py-2">
+                        <MessageSquare className="w-3.5 h-3.5 text-lime-300 shrink-0 mt-0.5" />
+                        <p className="whitespace-pre-wrap italic">{entry.notes}</p>
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>
@@ -286,6 +289,7 @@ export function SetPill({ set, type, unit }) {
   else if (type === 'reps') txt = `× ${set.reps || '?'}`;
   else if (type === 'distance_duration') txt = `${set.distance || '?'}${unit || ''} / ${fmtDur(set.duration)}`;
   else if (type === 'duration') txt = fmtDur(set.duration);
+  if ((type === 'weight_reps' || type === 'reps') && set.rir != null) txt += ` · RIR ${set.rir}`;
   return <span className="text-xs font-mono bg-zinc-800 text-zinc-300 px-2 py-1 rounded">{txt}</span>;
 }
 
@@ -308,7 +312,7 @@ export function computeExerciseStats(exercise, history) {
     stats.max1RM = max1RM;
     stats.totalVolume = totalVolume;
     stats.bestSet = bestSet;
-    stats.totalSessions = history.length;
+    stats.totalSessions = new Set(history.map(item => item.session.id)).size;
   } else if (exercise.type === 'reps') {
     let maxReps = 0, totalReps = 0;
     history.forEach(({ entry }) => completedSets(entry).forEach(s => {
@@ -317,7 +321,7 @@ export function computeExerciseStats(exercise, history) {
     }));
     stats.maxReps = maxReps;
     stats.totalReps = totalReps;
-    stats.totalSessions = history.length;
+    stats.totalSessions = new Set(history.map(item => item.session.id)).size;
   } else if (exercise.type === 'distance_duration') {
     let maxDist = 0, totalDist = 0, bestPace = Infinity, longestRun = 0;
     history.forEach(({ entry }) => completedSets(entry).forEach(s => {
@@ -333,7 +337,7 @@ export function computeExerciseStats(exercise, history) {
     stats.totalDist = totalDist;
     stats.bestPace = bestPace === Infinity ? 0 : bestPace;
     stats.longestRun = longestRun;
-    stats.totalSessions = history.length;
+    stats.totalSessions = new Set(history.map(item => item.session.id)).size;
   } else if (exercise.type === 'duration') {
     let maxDur = 0, totalDur = 0;
     history.forEach(({ entry }) => completedSets(entry).forEach(s => {
@@ -342,7 +346,7 @@ export function computeExerciseStats(exercise, history) {
     }));
     stats.maxDur = maxDur;
     stats.totalDur = totalDur;
-    stats.totalSessions = history.length;
+    stats.totalSessions = new Set(history.map(item => item.session.id)).size;
   }
   return stats;
 }

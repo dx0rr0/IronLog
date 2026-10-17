@@ -1,11 +1,16 @@
+import { DEFAULT_REST_SECONDS } from '../../../domain/training/training-defaults.js';
 import { DurField } from '../../shared/DurField.jsx';
 import React from 'react';
-import { ArrowDown, ArrowUp, ClipboardList, Copy, MessageSquare, Pencil, Play, Plus, Save, Timer, Trash2, X } from 'lucide-react';
+import { ArrowLeftRight, ClipboardList, Copy, MessageSquare, Pencil, Play, Plus, Save, Timer, Trash2, X } from 'lucide-react';
 import { useState } from 'react';
 import { MUSCLE_GROUPS, availableRoutineEntries } from '../../../domain/exercises/catalog.js';
 import { ExercisePicker } from '../../shared/ExercisePicker.jsx';
 import { NewExerciseForm } from '../exercises/ExerciseViews.jsx';
 import { fmtDur } from '../../shared/formatters.js';
+import { SupersetControls } from '../../shared/SupersetControls.jsx';
+import { useBackGuard, useBackLayer } from '../../shared/BrowserNavigation.jsx';
+import { joinSuperset, splitSuperset, moveTrainingEntry, moveTrainingBlock, normalizeSupersets, supersetInfo, trainingBlocks, updateTrainingEntry } from '../../../domain/training/supersets.js';
+import { DragHandle, useDragReorder } from '../../shared/DragReorder.jsx';
 
 export function RoutinesView({ routines, exMap, onStart, onNew, onEdit, onDelete, onDuplicate, hasActive }) {
   return (
@@ -108,21 +113,24 @@ export function RoutinesView({ routines, exMap, onStart, onNew, onEdit, onDelete
 export function RoutineEditor({ initial, draft, exercises, exMap, onCreateExercise, onSave, onCancel, showConfirm }) {
   const [routine, setRoutine] = useState(() => initial || draft ? {
     ...JSON.parse(JSON.stringify(initial || draft)),
-    exercises: JSON.parse(JSON.stringify(availableRoutineEntries(initial || draft, exMap))),
+    exercises: normalizeSupersets(JSON.parse(JSON.stringify(availableRoutineEntries(initial || draft, exMap)))),
   } : {
     name: '',
     notes: '',
     exercises: [],
   });
   const [pickerOpen, setPickerOpen] = useState(false);
+  const [replaceIndex, setReplaceIndex] = useState(null);
   const [creatingExercise, setCreatingExercise] = useState(false);
   const [dirty, setDirty] = useState(false);
+  useBackLayer(creatingExercise, () => { setCreatingExercise(false); setPickerOpen(true); });
+  useBackGuard(dirty, () => { handleCancel(); return true; });
 
   const update = (patch) => { setRoutine(r => ({ ...r, ...patch })); setDirty(true); };
   const updateExercise = (idx, patch) => {
     setRoutine(r => ({
       ...r,
-      exercises: r.exercises.map((e, i) => i !== idx ? e : { ...e, ...patch }),
+      exercises: updateTrainingEntry(r.exercises, idx, patch),
     }));
     setDirty(true);
   };
@@ -132,7 +140,7 @@ export function RoutineEditor({ initial, draft, exercises, exMap, onCreateExerci
       ...r,
       exercises: [...r.exercises, {
         exerciseId: ex.id,
-        restSeconds: 0,
+        restSeconds: DEFAULT_REST_SECONDS,
         notes: '',
         sets: [{ repsMin: 8, repsMax: 12, rir: 2 }, { repsMin: 8, repsMax: 12, rir: 2 }, { repsMin: 8, repsMax: 12, rir: 2 }],
       }],
@@ -148,20 +156,34 @@ export function RoutineEditor({ initial, draft, exercises, exMap, onCreateExerci
       confirmLabel: 'Quitar',
       danger: true,
       onConfirm: () => {
-        setRoutine(r => ({ ...r, exercises: r.exercises.filter((_, i) => i !== idx) }));
+        setRoutine(r => ({ ...r, exercises: normalizeSupersets(r.exercises.filter((_, i) => i !== idx)) }));
         setDirty(true);
       },
     });
   };
 
   const moveExercise = (idx, dir) => {
-    setRoutine(r => {
-      const exs = [...r.exercises];
-      const t = idx + dir;
-      if (t < 0 || t >= exs.length) return r;
-      [exs[idx], exs[t]] = [exs[t], exs[idx]];
-      return { ...r, exercises: exs };
-    });
+    setRoutine(r => ({ ...r, exercises: moveTrainingEntry(r.exercises, idx, dir) }));
+    setDirty(true);
+  };
+
+  const blocks = trainingBlocks(routine.exercises);
+  const blockOf = index => blocks.findIndex(block => index >= block.start && index <= block.end);
+  const reorder = useDragReorder({
+    blocks: blocks.map(block => {
+      const members = routine.exercises.slice(block.start, block.end + 1).map(e => exMap[e.exerciseId]);
+      const info = supersetInfo(routine.exercises, block.start);
+      return { key: `${block.start}-${routine.exercises[block.start].exerciseId}`,
+        title: members.map(ex => ex?.name || '?').join(' + ').toUpperCase(),
+        subtitle: info ? `Superserie ${info.number}` : (MUSCLE_GROUPS[members[0]?.muscleGroup] || members[0]?.muscleGroup || '') };
+    }),
+    onReorder: (from, to) => { setRoutine(r => ({ ...r, exercises: moveTrainingBlock(r.exercises, from, to) })); setDirty(true); },
+  });
+
+  const replaceExercise = (idx, ex) => {
+    setReplaceIndex(null);
+    setRoutine(r => ({ ...r, exercises: r.exercises.map((e, i) => i !== idx || e.exerciseId === ex.id ? e
+      : { ...e, exerciseId: ex.id, notes: '' }) }));
     setDirty(true);
   };
 
@@ -216,7 +238,7 @@ export function RoutineEditor({ initial, draft, exercises, exMap, onCreateExerci
       showConfirm({ title: 'Sin ejercicios', body: 'Añade al menos un ejercicio a la rutina.', confirmLabel: 'OK', hideCancel: true, onConfirm: () => {} });
       return;
     }
-    onSave(routine);
+    onSave({ ...routine, exercises: normalizeSupersets(routine.exercises) });
   };
 
   return (
@@ -276,10 +298,16 @@ export function RoutineEditor({ initial, draft, exercises, exMap, onCreateExerci
                     key={ei}
                     re={re}
                     ex={ex}
-                    isFirst={ei === 0}
-                    isLast={ei === routine.exercises.length - 1}
+                    isFirst={(supersetInfo(routine.exercises, ei)?.start ?? ei) === 0}
+                    isLast={(supersetInfo(routine.exercises, ei)?.end ?? ei) === routine.exercises.length - 1}
+                    superset={!!supersetInfo(routine.exercises, ei)}
+                    supersetControls={<SupersetControls entries={routine.exercises} index={ei} exMap={exMap}
+                      onJoin={() => { setRoutine(r => ({ ...r, exercises: joinSuperset(r.exercises, ei, `ss_${Date.now()}`) })); setDirty(true); }}
+                      onSplit={() => { setRoutine(r => ({ ...r, exercises: splitSuperset(r.exercises, ei) })); setDirty(true); }} />}
                     onUpdate={patch => updateExercise(ei, patch)}
                     onRemove={() => removeExercise(ei)}
+                    onReplace={() => setReplaceIndex(ei)}
+                    dragProps={reorder.handleProps(blockOf(ei))}
                     onMoveUp={() => moveExercise(ei, -1)}
                     onMoveDown={() => moveExercise(ei, +1)}
                     onAddSet={() => addSet(ei)}
@@ -299,6 +327,12 @@ export function RoutineEditor({ initial, draft, exercises, exMap, onCreateExerci
         </div>
       </div>
 
+      {replaceIndex != null && (
+        <ExercisePicker exercises={exercises} title="CAMBIAR POR"
+          currentId={routine.exercises[replaceIndex]?.exerciseId}
+          onPick={ex => replaceExercise(replaceIndex, ex)} onClose={() => setReplaceIndex(null)} />
+      )}
+      {reorder.overlay}
       {pickerOpen && (
         <ExercisePicker exercises={exercises} onPick={addExercise} onClose={() => setPickerOpen(false)}
           onCreate={() => { setPickerOpen(false); setCreatingExercise(true); }} />
@@ -320,36 +354,33 @@ export function RoutineEditor({ initial, draft, exercises, exMap, onCreateExerci
   );
 }
 
-export function RoutineExerciseEditor({ re, ex, isFirst, isLast, onUpdate, onRemove, onMoveUp, onMoveDown, onAddSet, onRemoveSet, onUpdateSet }) {
+export function RoutineExerciseEditor({ re, ex, isFirst, isLast, superset, supersetControls, dragProps, onUpdate, onRemove, onReplace, onMoveUp, onMoveDown, onAddSet, onRemoveSet, onUpdateSet }) {
   const [showNotes, setShowNotes] = useState(!!re.notes);
   const [showRest, setShowRest] = useState(false);
 
   return (
     <div className="bg-zinc-900 border border-zinc-800 rounded-2xl overflow-hidden">
-      <div className="flex items-center gap-2 p-3 border-b border-zinc-800">
-        <div className="flex flex-col -ml-1 shrink-0">
-          <button onClick={onMoveUp} disabled={isFirst} className="text-zinc-500 hover:text-lime-300 disabled:opacity-20 p-0.5">
-            <ArrowUp className="w-3.5 h-3.5" strokeWidth={3} />
-          </button>
-          <button onClick={onMoveDown} disabled={isLast} className="text-zinc-500 hover:text-lime-300 disabled:opacity-20 p-0.5">
-            <ArrowDown className="w-3.5 h-3.5" strokeWidth={3} />
-          </button>
-        </div>
+      <div {...dragProps} className="flex items-center gap-2 p-3 border-b border-zinc-800">
+        {!(isFirst && isLast) && <DragHandle onMoveUp={() => !isFirst && onMoveUp()} onMoveDown={() => !isLast && onMoveDown()} />}
         <div className="flex-1 min-w-0">
           <div className="font-display text-lg leading-tight">{ex.name.toUpperCase()}</div>
           <div className="text-[10px] text-zinc-500 uppercase tracking-wide">{MUSCLE_GROUPS[ex.muscleGroup] || ex.muscleGroup}</div>
         </div>
-        <button onClick={onRemove} className="text-zinc-500 hover:text-red-400 p-1 shrink-0">
+        {onReplace && <button onClick={onReplace} className="text-zinc-500 hover:text-lime-300 p-1 shrink-0" aria-label="Cambiar ejercicio">
+          <ArrowLeftRight className="w-4 h-4" />
+        </button>}
+        <button onClick={onRemove} className="text-zinc-500 hover:text-red-400 p-1 shrink-0" aria-label="Quitar ejercicio">
           <Trash2 className="w-4 h-4" />
         </button>
       </div>
 
+      {supersetControls}
       <div className="flex items-center gap-1 px-3 pt-3 flex-wrap">
         <button
           onClick={() => setShowRest(v => !v)}
           className={`flex items-center gap-1 text-[10px] uppercase tracking-wider font-bold px-2 py-1 rounded-full transition ${re.restSeconds > 0 ? 'bg-lime-300/15 text-lime-300' : 'bg-zinc-800 text-zinc-400 hover:text-zinc-200'}`}
         >
-          <Timer className="w-3 h-3" /> {re.restSeconds > 0 ? fmtDur(re.restSeconds) : 'Descanso'}
+          <Timer className="w-3 h-3" /> {superset ? 'Entre rondas: ' : ''}{re.restSeconds > 0 ? fmtDur(re.restSeconds) : 'Descanso'}
         </button>
         <button
           onClick={() => setShowNotes(v => !v)}

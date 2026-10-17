@@ -1,8 +1,10 @@
 import React, { useMemo, useState } from 'react';
-import { Plus, Search, X } from 'lucide-react';
+import { ArrowLeftRight, Check, Plus, Search, X } from 'lucide-react';
 import { MUSCLE_GROUPS, exerciseMatches } from '../../domain/exercises/catalog.js';
+import { useBackLayer } from './BrowserNavigation.jsx';
 
-export function ExercisePicker({ exercises, onPick, onClose, onCreate }) {
+export function ExercisePicker({ exercises, onPick, onClose, onCreate, title = 'EJERCICIOS', currentId = null }) {
+  useBackLayer(true, onClose);
   const [search, setSearch] = useState('');
   const [cat, setCat] = useState('all');
   const [muscle, setMuscle] = useState('all');
@@ -31,7 +33,7 @@ export function ExercisePicker({ exercises, onPick, onClose, onCreate }) {
           <button onClick={onClose} className="text-zinc-400 hover:text-zinc-200">
             <X className="w-5 h-5" />
           </button>
-          <h2 className="font-display text-2xl flex-1">EJERCICIOS</h2>
+          <h2 className="font-display text-2xl flex-1">{title}</h2>
           {onCreate && <button onClick={onCreate} className="text-xs font-bold text-lime-300 flex items-center gap-1">
             <Plus className="w-4 h-4" /> CREAR
           </button>}
@@ -43,7 +45,7 @@ export function ExercisePicker({ exercises, onPick, onClose, onCreate }) {
               autoFocus
               value={search}
               onChange={e => setSearch(e.target.value)}
-              placeholder="Buscar..."
+              placeholder="Buscar ejercicio o grupo muscular..."
               className="w-full bg-zinc-900 border border-zinc-800 rounded-lg pl-9 pr-3 py-2 text-sm focus:border-lime-300/50 outline-none"
             />
           </div>
@@ -74,13 +76,15 @@ export function ExercisePicker({ exercises, onPick, onClose, onCreate }) {
                   <button
                     key={e.id}
                     onClick={() => onPick(e)}
-                    className="w-full text-left bg-zinc-900 hover:bg-zinc-800 rounded-lg px-3 py-2.5 transition flex items-center justify-between"
+                    disabled={e.id === currentId}
+                    className="w-full text-left bg-zinc-900 hover:bg-zinc-800 disabled:opacity-50 rounded-lg px-3 py-2.5 transition flex items-center justify-between"
                   >
                     <div>
                       <div className="font-medium text-zinc-100">{e.name}</div>
-                      <div className="text-[10px] text-zinc-500 uppercase tracking-wide">{e.equipment}</div>
+                      <div className="text-[10px] text-zinc-500 uppercase tracking-wide">{MUSCLE_GROUPS[e.muscleGroup] || e.muscleGroup} • {e.equipment}</div>
                     </div>
-                    <Plus className="w-4 h-4 text-zinc-500" />
+                    {e.id === currentId ? <Check className="w-4 h-4 text-lime-300" />
+                      : currentId ? <ArrowLeftRight className="w-4 h-4 text-zinc-500" /> : <Plus className="w-4 h-4 text-zinc-500" />}
                   </button>
                 ))}
               </div>

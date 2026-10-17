@@ -1,5 +1,6 @@
 import React from 'react';
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { useBackLayer } from '../../shared/BrowserNavigation.jsx';
 import { sessionVolume } from '../../../domain/training/session-utils.js';
 import { getLastBackupAt, getStorageEstimate } from '../../../infrastructure/storage/persistence.js';
 import { AlertTriangle, Check, ChevronRight, Download, Dumbbell, HardDrive, Plus, ShieldCheck, Target, Trash2, Upload, X } from 'lucide-react';
@@ -208,6 +209,7 @@ export function SettingsView({ sessions, customExercises, routines = [], bodyWei
 }
 
 export function PlateConfigEditor({ config, onSave, onReset, onClose }) {
+  useBackLayer(true, onClose);
   // Work on a draft so the user can hit Cancel without persisting changes.
   const [draft, setDraft] = useState(() => ({
     barWeightKg: config.barWeightKg,

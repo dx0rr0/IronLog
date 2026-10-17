@@ -7,6 +7,7 @@ import {
   numOrEmpty,
   defaultSetShape,
   inheritSet,
+  swapEntryExercise,
   findLastEntryForExercise,
   computePlates,
   platesSummary,
@@ -491,6 +492,18 @@ console.log('\nintegration: plate breakdown sanity over 5..300 kg');
   }
   ok('all 72 reconstitutions match target ± epsilon', true);
   ok(`most plate combos found exactly (${perfectCount}/${totalCount})`, perfectCount > totalCount * 0.85);
+}
+
+{
+  const squat = { id: 'squat', type: 'weight_reps' };
+  const hist = [{ date: 'x', entries: [{ exerciseId: 'squat', sets: [{ weight: 100, reps: 5, done: true }] }] }];
+  const entry = { exerciseId: 'bench', supersetId: 'ss', restSeconds: 90, notes: 'old',
+    sets: [{ weight: 60, reps: 8, repsMin: 6, repsMax: 8, done: true }, { weight: 60, reps: 8, done: false }] };
+  const swapped = swapEntryExercise(entry, squat, hist);
+  ok('swap keeps position metadata', swapped.supersetId === 'ss' && swapped.restSeconds === 90);
+  ok('swap keeps set count and targets', swapped.sets.length === 2 && swapped.sets[0].repsMin === 6);
+  ok('swap prefills from new exercise history', swapped.sets[0].weight === 100 && swapped.sets[1].weight === '');
+  ok('swap clears done and notes', swapped.sets.every(set => !set.done) && swapped.notes === '');
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);

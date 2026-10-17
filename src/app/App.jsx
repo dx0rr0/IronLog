@@ -1,11 +1,15 @@
+import { DEFAULT_REST_SECONDS } from '../domain/training/training-defaults.js';
 import React from 'react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { DEFAULT_PLATE_CONFIG, findLastEntryForExercise, inheritSet } from '../domain/exercises/exercise-utils.js';
 import { storage } from '../infrastructure/storage/storage.js';
+import { mergeCustomExercises } from '../domain/exercises/custom-exercises.js';
 import { dismissBackupReminder, markBackupDone, requestPersistentStorage, shouldRemindBackup } from '../infrastructure/storage/persistence.js';
 import { repeatSession } from '../domain/training/workout-intelligence.js';
 import { hasCompletedSet } from '../domain/training/session-utils.js';
 import { routineDraftFromSession } from '../domain/training/routine-from-session.js';
+import { normalizeSupersets } from '../domain/training/supersets.js';
+import { closeRestNotification } from '../infrastructure/notifications/rest-notification.js';
 import { AlertTriangle, Dumbbell, ShieldCheck, X } from 'lucide-react';
 import { DEFAULT_EXERCISES, availableRoutineEntries } from '../domain/exercises/catalog.js';
 import { dateKey } from '../presentation/shared/formatters.js';
@@ -19,9 +23,10 @@ import { SettingsView } from '../presentation/features/settings/SettingsView.jsx
 import { BottomNav, ConfirmDialog } from '../presentation/shell/Navigation.jsx';
 import { goalMessage, goalReachedBySession, weeklyGoalProgress } from '../domain/training/motivation.js';
 import { WeeklyGoalSetup } from '../presentation/features/motivation/MotivationUI.jsx';
+import { BrowserNavigationContext, useBrowserNavigation } from '../presentation/shared/BrowserNavigation.jsx';
 
 export default function App() {
-  const [tab, setTab] = useState('home');
+  const { tab, setTab, view, setView, navigation } = useBrowserNavigation();
   const [loading, setLoading] = useState(true);
   const [hydrated, setHydrated] = useState(false);
   const [loadError, setLoadError] = useState(false);
@@ -38,7 +43,6 @@ export default function App() {
   const [plateConfig, setPlateConfig] = useState(DEFAULT_PLATE_CONFIG);
   const [weeklyGoal, setWeeklyGoal] = useState(null);
   const [goalPromptDismissed, setGoalPromptDismissed] = useState(false);
-  const [view, setView] = useState(null); // {kind, data} for sub-views
   const [toast, setToast] = useState(null);
   const [dialog, setDialog] = useState(null); // {title, body, onConfirm, danger, confirmLabel, cancelLabel}
   const [persistGranted, setPersistGranted] = useState(null); // null | true | false
@@ -138,21 +142,21 @@ export default function App() {
       if (r) {
         name = r.name || name;
         routineNotes = r.notes || '';
-        entries = availableRoutineEntries(r, exMap).map(re => {
+        entries = normalizeSupersets(availableRoutineEntries(r, exMap).map(re => {
           const ex = exMap[re.exerciseId];
           const last = findLastEntryForExercise(re.exerciseId, sessions);
           const routineSets = re.sets || [{}];
           return {
             exerciseId: re.exerciseId,
-            restSeconds: re.restSeconds || 0,
-            notes: re.notes || '',
+            ...(re.supersetId ? { supersetId: re.supersetId } : {}),
+            restSeconds: re.restSeconds ?? DEFAULT_REST_SECONDS,
+            // Notes belong to the day; the routine's note is a read-only hint.
+            notes: '',
+            ...(re.notes ? { routineNote: re.notes } : {}),
             sets: routineSets.map((s, idx) => {
               // Pair each routine set with the corresponding previous set
-              // by index (set 1 ↔ set 1, etc.). If the previous session had
-              // fewer sets, fall back to its last set as a hint.
-              const prev = last?.sets
-                ? (last.sets[idx] || last.sets[last.sets.length - 1])
-                : null;
+              // by index (set 1 ↔ set 1). Never substitute another ordinal.
+              const prev = last?.sets?.[idx]?.done ? last.sets[idx] : null;
               return inheritSet(ex, prev, {
                 repsMin: s.repsMin ?? null,
                 repsMax: s.repsMax ?? null,
@@ -160,7 +164,7 @@ export default function App() {
               });
             }),
           };
-        });
+        }));
       }
     }
     setCurrentSession({
@@ -168,7 +172,8 @@ export default function App() {
       date: new Date().toISOString(),
       startedAt: Date.now(),
       name,
-      notes: routineNotes,
+      notes: '',
+      ...(routineNotes ? { routineNotes } : {}),
       routineId: routineId || null,
       entries,
     });
@@ -205,10 +210,11 @@ export default function App() {
     }
     setSessions(nextSessions);
     setCurrentSession(null);
+    void closeRestNotification();
     const goalReached = goalReachedBySession(sessions, finished, weeklyGoal);
     const progress = goalReached ? weeklyGoalProgress(nextSessions, weeklyGoal, finished.date) : null;
     setView({ kind: 'summary', data: finished,
-      celebration: progress ? goalMessage(progress.weekStart) : null });
+      celebration: progress ? goalMessage(progress.weekStart) : null }, { replace: true });
     showToast('Entrenamiento guardado ✓');
   };
 
@@ -216,6 +222,7 @@ export default function App() {
     // If empty (no exercises and no notes), cancel without confirmation
     if (!currentSession || (currentSession.entries.length === 0 && !currentSession.notes?.trim())) {
       setCurrentSession(null);
+      void closeRestNotification();
       setView(null);
       return;
     }
@@ -226,6 +233,7 @@ export default function App() {
       danger: true,
       onConfirm: () => {
         setCurrentSession(null);
+        void closeRestNotification();
         setView(null);
       },
     });
@@ -261,7 +269,7 @@ export default function App() {
     }
     setSessions(nextSessions);
     setEditingSession(null);
-    setView(null);
+    setView({ kind: 'session', data: editingSession });
     showToast('Cambios guardados ✓');
   };
 
@@ -272,21 +280,23 @@ export default function App() {
       confirmLabel: 'Descartar',
       danger: true,
       onConfirm: () => {
+        const original = sessions.find(s => s.id === editingSession?.id);
         setEditingSession(null);
-        setView(null);
+        setView(original ? { kind: 'session', data: original } : null);
       },
     });
   };
 
   const addCustomExercise = async ex => {
-    const created = { ...ex, id: 'cust_' + (globalThis.crypto?.randomUUID?.()
+    const created = { ...ex, updatedAt: Date.now(), id: 'cust_' + (globalThis.crypto?.randomUUID?.()
       || `${Date.now()}_${Math.random().toString(36).slice(2)}`) };
     const next = [...customExercises, created];
     if (!await storage.set('custom-exercises', next)) {
       setSaveError(true);
       return null;
     }
-    setCustomExercises(next);
+    const saved = await storage.get('custom-exercises');
+    setCustomExercises(prev => mergeCustomExercises(prev, saved, next));
     showToast('Ejercicio creado ✓');
     return created;
   };
@@ -298,13 +308,13 @@ export default function App() {
       confirmLabel: 'Archivar',
       danger: true,
       onConfirm: () => setCustomExercises(prev => prev.map(ex =>
-        ex.id === id ? { ...ex, hidden: true } : ex)),
+        ex.id === id ? { ...ex, hidden: true, updatedAt: Math.max(Date.now(), (Number(ex.updatedAt) || 0) + 1) } : ex)),
     });
   };
 
   const restoreCustomExercise = (id) => {
     setCustomExercises(prev => prev.map(ex =>
-      ex.id === id ? { ...ex, hidden: false } : ex));
+      ex.id === id ? { ...ex, hidden: false, updatedAt: Math.max(Date.now(), (Number(ex.updatedAt) || 0) + 1) } : ex));
   };
 
   // ---------- routines ----------
@@ -343,7 +353,7 @@ export default function App() {
     const data = {
       version: 4,
       exportedAt: new Date().toISOString(),
-      customExercises,
+      customExercises: mergeCustomExercises(customExercises, await storage.get('custom-exercises')),
       sessions,
       currentSession,
       routines,
@@ -375,10 +385,7 @@ export default function App() {
           body: `Importar ${data.sessions.length} sesión(es), ${data.customExercises?.length || 0} ejercicio(s) propios, ${data.routines?.length || 0} rutina(s)${importedBw.length ? ` y ${importedBw.length} registro(s) de peso` : ''}${data.currentSession ? ' y una sesión en curso' : ''}. Se fusionarán con los datos actuales.`,
           confirmLabel: 'Importar',
           onConfirm: () => {
-            const newCustom = [...customExercises];
-            (data.customExercises || []).forEach(ex => {
-              if (!newCustom.find(c => c.id === ex.id)) newCustom.push(ex);
-            });
+            const newCustom = mergeCustomExercises(customExercises, data.customExercises);
             const newSessions = [...sessions];
             data.sessions.forEach(s => {
               if (!newSessions.find(n => n.id === s.id)) newSessions.push(s);
@@ -446,7 +453,13 @@ export default function App() {
           body: '¿Estás seguro absoluto? Esto no se puede deshacer.',
           confirmLabel: 'BORRAR TODO',
           danger: true,
-          onConfirm: () => {
+          onConfirm: async () => {
+            // Empty snapshots intentionally keep custom data during upserts.
+            // The explicit reset must delete both stores before saving [].
+            if (!await storage.del('custom-exercises')) {
+              setSaveError(true);
+              return;
+            }
             setSessions([]);
             setCustomExercises([]);
             setRoutines([]);
@@ -505,7 +518,7 @@ export default function App() {
   }
 
   return (
-    <>
+    <BrowserNavigationContext.Provider value={navigation}>
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Anton&family=Outfit:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap');
         .font-display { font-family: 'Anton', 'Arial Narrow', sans-serif; letter-spacing: 0.02em; }
@@ -712,7 +725,7 @@ export default function App() {
             onDismiss={() => setGoalPromptDismissed(true)} />
         )}
       </div>
-    </>
+    </BrowserNavigationContext.Provider>
   );
 }
 

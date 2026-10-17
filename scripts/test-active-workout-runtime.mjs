@@ -25,8 +25,18 @@ const dom = new JSDOM('<!doctype html><html><body><div id="root"></div></body></
 const { window } = dom;
 window.indexedDB = globalThis.indexedDB;
 window.IDBKeyRange = globalThis.IDBKeyRange;
-window.navigator.serviceWorker = { register: () => Promise.resolve({ scope: '/' }),
-  ready: Promise.resolve({ scope: '/' }), addEventListener() {} };
+const notifications = [];
+let closed = 0, failNotification = false;
+const registration = { scope: '/',
+  showNotification: async (title, options) => {
+    if (failNotification) throw new Error('Android notification blocked');
+    notifications.push({ title, options });
+  },
+  getNotifications: async () => [{ close() { closed++; } }],
+};
+window.Notification = { permission: 'granted' };
+window.navigator.serviceWorker = { register: () => Promise.resolve(registration),
+  ready: Promise.resolve(registration), addEventListener() {} };
 Object.defineProperty(window.navigator, 'storage', { value: {
   persist: () => Promise.resolve(true), persisted: () => Promise.resolve(true),
   estimate: () => Promise.resolve({ usage: 1024, quota: 1024 * 1024 }),
@@ -64,12 +74,23 @@ button('Iniciar').click();
 await waitFor(() => !!window.document.body.textContent.includes('DESCANSO'));
 const timer = (await storage.get('current-session')).restTimer;
 assert.equal(timer.total, 120);
+await waitFor(() => window.document.body.textContent.includes('Aviso enviado'));
+assert.equal(notifications[0].options.silent, undefined);
+assert.equal(closed, 0, 'starting a rest does not dismiss its notification');
+failNotification = true;
+button('Probar aviso otra vez').click();
+await waitFor(() => window.document.body.textContent.includes('No se pudo mostrar el aviso'));
+assert.ok(button('Reintentar aviso'), 'a granted permission does not hide failed delivery');
+failNotification = false;
+button('Reintentar aviso').click();
+await waitFor(() => !!button('Probar aviso otra vez'));
 const actualNow = window.Date.now;
 let visibility = 'hidden';
 Object.defineProperty(window.document, 'visibilityState', { configurable: true, get: () => visibility });
 window.Date.now = () => timer.endsAt - 45000;
 window.document.dispatchEvent(new window.Event('visibilitychange'));
 await waitFor(() => window.document.body.textContent.includes('0:45'));
+assert.equal(closed, 0, 'backgrounding the app preserves the OS notification');
 assert.equal((await storage.get('current-session')).restTimer.endsAt, timer.endsAt);
 window.Date.now = () => timer.endsAt + 10000;
 window.document.dispatchEvent(new window.Event('visibilitychange'));
@@ -79,6 +100,7 @@ assert.equal((await storage.get('current-session')).restTimer.endsAt, timer.ends
 visibility = 'visible';
 window.document.dispatchEvent(new window.Event('visibilitychange'));
 await waitFor(async () => !(await storage.get('current-session')).restTimer);
+await waitFor(() => closed === 1);
 window.Date.now = actualNow;
 window.close();
 console.log('Active exercise creation and background rest timer checks passed');

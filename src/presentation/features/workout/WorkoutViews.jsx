@@ -1,23 +1,30 @@
+import { DEFAULT_REST_SECONDS } from '../../../domain/training/training-defaults.js';
 import { DurField } from '../../shared/DurField.jsx';
 import { ExercisePicker } from '../../shared/ExercisePicker.jsx';
-import { NewExerciseForm } from '../exercises/ExerciseViews.jsx';
+import { ExerciseDetail, NewExerciseForm } from '../exercises/ExerciseViews.jsx';
 import React from 'react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { exerciseComparisons, predictGhost, summarizeSession } from '../../../domain/training/workout-intelligence.js';
-import { computePlates, epley, findLastEntryForExercise, inheritSet, platesSummary } from '../../../domain/exercises/exercise-utils.js';
-import { ArrowDown, ArrowLeft, ArrowUp, Check, ChevronDown, Dumbbell, Edit2, MessageSquare, Pencil, Play, Plus, RotateCcw, Save, SkipForward, Timer, Trash2, X } from 'lucide-react';
+import { exerciseComparisons, matchingSet, predictGhost, summarizeSession } from '../../../domain/training/workout-intelligence.js';
+import { computePlates, epley, findLastEntryForExercise, inheritSet, platesSummary, swapEntryExercise } from '../../../domain/exercises/exercise-utils.js';
+import { ArrowLeft, ArrowLeftRight, ArrowUp, Check, ChevronDown, Dumbbell, Edit2, MessageSquare, Pencil, Play, Plus, RotateCcw, Save, SkipForward, Timer, Trash2, X } from 'lucide-react';
 import { completedSets, sessionVolume } from '../../../domain/training/session-utils.js';
 import { routineDraftFromSession } from '../../../domain/training/routine-from-session.js';
 import { fmtDur, formatLong, formatShort, formatTime, parseDur, sessionDuration } from '../../shared/formatters.js';
 import { MUSCLE_GROUPS, exerciseMatches } from '../../../domain/exercises/catalog.js';
-import { detectSetRecords } from '../../../domain/training/records.js';
+import { detectSetRecords, setProgress } from '../../../domain/training/records.js';
 import { volumeComparison } from '../../../domain/training/motivation.js';
 import { GoalCelebration, RecordCelebration } from '../motivation/MotivationUI.jsx';
 import { adjustRestTimer, createRestTimer, restSecondsLeft } from '../../../domain/training/rest-timer.js';
 import { closeRestNotification, showRestNotification } from '../../../infrastructure/notifications/rest-notification.js';
+import { SupersetBadge, SupersetControls } from '../../shared/SupersetControls.jsx';
+import { useBackGuard, useBackLayer } from '../../shared/BrowserNavigation.jsx';
+import { joinSuperset, splitSuperset, moveTrainingEntry, moveTrainingBlock, normalizeSupersets, supersetInfo, trainingBlocks, updateTrainingEntry, restAfterSet, nextSupersetSet } from '../../../domain/training/supersets.js';
+import { DragHandle, useDragReorder } from '../../shared/DragReorder.jsx';
+import { cancelRestChime, finishRestChime, scheduleRestChime, unlockAudio } from '../../../infrastructure/audio/rest-sound.js';
 
 export function WorkoutSession({ mode, session, setSession, exercises, exMap, onCreateExercise, onFinish, onCancel, previousSessions, plateConfig, showConfirm, finishing = false }) {
   const [pickerOpen, setPickerOpen] = useState(false);
+  const [replaceIndex, setReplaceIndex] = useState(null);
   const [creatingExercise, setCreatingExercise] = useState(false);
   const [editingName, setEditingName] = useState(false);
   const [inputError, setInputError] = useState('');
@@ -27,13 +34,21 @@ export function WorkoutSession({ mode, session, setSession, exercises, exMap, on
   useEffect(() => () => clearTimeout(recordEditTimer.current), []);
   const [elapsed, setElapsed] = useState(0);
   const isEdit = mode === 'edit';
+  useBackGuard(isEdit, () => { onCancel(); return true; });
+  useBackLayer(creatingExercise, () => { setCreatingExercise(false); setPickerOpen(true); });
   const [now, setNow] = useState(Date.now);
   const [pageVisible, setPageVisible] = useState(() => document.visibilityState === 'visible');
-  const [notificationEnabled, setNotificationEnabled] = useState(() =>
-    typeof Notification !== 'undefined' && Notification.permission === 'granted');
+  const [notificationState, setNotificationState] = useState('idle');
   const restTimer = isEdit ? null : session.restTimer;
   const restRemaining = restSecondsLeft(restTimer, now);
   const [showSessionNotes, setShowSessionNotes] = useState(!!session.notes);
+
+  const publishRestNotification = (timer, requestPermission = false) => {
+    setNotificationState('pending');
+    void showRestNotification(timer, requestPermission).then(result => {
+      if (result.status !== 'cancelled') setNotificationState(result.status);
+    });
+  };
 
   // Live timer (active mode only)
   useEffect(() => {
@@ -68,44 +83,49 @@ export function WorkoutSession({ mode, session, setSession, exercises, exMap, on
     setSession(current => current.restTimer?.endsAt === restTimer.endsAt
       ? { ...current, restTimer: null } : current);
     void closeRestNotification();
-    if (now - restTimer.endsAt < 15000) tryBeep();
+    finishRestChime(restTimer.endsAt, { late: now - restTimer.endsAt >= 15000 });
+    vibrateRestEnd(now - restTimer.endsAt < 15000);
   }, [restTimer, restRemaining, pageVisible, now, setSession]);
 
   useEffect(() => {
     if (isEdit || !restTimer || restSecondsLeft(restTimer) === 0 ||
         typeof Notification === 'undefined' || Notification.permission !== 'granted') return;
-    void showRestNotification(restTimer).then(setNotificationEnabled);
+    publishRestNotification(restTimer);
   // A restored session needs to restore its notification once on mount.
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  useEffect(() => () => { void closeRestNotification(); }, []);
-
-  const beginRest = (seconds, exerciseName) => {
+  const beginRest = (seconds, exerciseName, progress = null) => {
     if (seconds <= 0) return;
-    const timer = createRestTimer(seconds, exerciseName);
+    const timer = { ...createRestTimer(seconds, exerciseName), ...(progress ? { progress } : {}) };
+    unlockAudio();
+    scheduleRestChime(timer.endsAt);
     setNow(Date.now());
     setSession(current => ({ ...current, restTimer: timer }));
-    void showRestNotification(timer, true).then(setNotificationEnabled);
+    publishRestNotification(timer, true);
   };
 
-  const startRest = (exerciseId) => {
-    const entry = session.entries.find(e => e.exerciseId === exerciseId);
-    const ex = exMap[exerciseId];
+  const startRest = (entryIndex) => {
+    const entry = session.entries[entryIndex];
+    const ex = exMap[entry.exerciseId];
     const seconds = entry?.restSeconds || 0;
     if (seconds <= 0) return;
-    beginRest(seconds, ex?.name || '');
+    beginRest(seconds, supersetInfo(session.entries, entryIndex) ? 'Superserie' : ex?.name || '');
   };
 
   const dismissRest = () => {
+    cancelRestChime();
     setSession(current => ({ ...current, restTimer: null }));
     void closeRestNotification();
   };
   const adjustRest = delta => {
     const timer = adjustRestTimer(restTimer, delta);
+    unlockAudio();
+    if (timer) scheduleRestChime(timer.endsAt);
+    else cancelRestChime();
     setNow(Date.now());
     setSession(current => ({ ...current, restTimer: timer }));
-    if (timer) void showRestNotification(timer).then(setNotificationEnabled);
+    if (timer) publishRestNotification(timer);
     else void closeRestNotification();
   };
 
@@ -122,7 +142,7 @@ export function WorkoutSession({ mode, session, setSession, exercises, exMap, on
         ...s,
         entries: [...s.entries, {
           exerciseId: ex.id,
-          restSeconds: 0,
+          restSeconds: DEFAULT_REST_SECONDS,
           notes: '',
           sets,
         }],
@@ -137,24 +157,48 @@ export function WorkoutSession({ mode, session, setSession, exercises, exMap, on
       body: `Se eliminará este ejercicio y sus series del entrenamiento.`,
       confirmLabel: 'Quitar',
       danger: true,
-      onConfirm: () => setSession(s => ({ ...s, entries: s.entries.filter((_, i) => i !== idx) })),
+      onConfirm: () => setSession(s => ({ ...s, entries: normalizeSupersets(s.entries.filter((_, i) => i !== idx)) })),
     });
   };
 
   const moveEntry = (idx, dir) => {
-    setSession(s => {
-      const entries = [...s.entries];
-      const target = idx + dir;
-      if (target < 0 || target >= entries.length) return s;
-      [entries[idx], entries[target]] = [entries[target], entries[idx]];
-      return { ...s, entries };
-    });
+    setSession(s => ({ ...s, entries: moveTrainingEntry(s.entries, idx, dir) }));
+  };
+
+  const blocks = trainingBlocks(session.entries);
+  const blockOf = index => blocks.findIndex(block => index >= block.start && index <= block.end);
+  const reorder = useDragReorder({
+    blocks: blocks.map(block => {
+      const members = session.entries.slice(block.start, block.end + 1).map(e => exMap[e.exerciseId]);
+      const info = supersetInfo(session.entries, block.start);
+      return { key: `${block.start}-${session.entries[block.start].exerciseId}`,
+        title: members.map(ex => ex?.name || '?').join(' + ').toUpperCase(),
+        subtitle: info ? `Superserie ${info.number}` : (MUSCLE_GROUPS[members[0]?.muscleGroup] || members[0]?.muscleGroup || '') };
+    }),
+    onReorder: (from, to) => setSession(s => ({ ...s, entries: moveTrainingBlock(s.entries, from, to) })),
+  });
+
+  const replaceEntry = (idx, ex) => {
+    const entry = session.entries[idx];
+    setReplaceIndex(null);
+    if (!entry || entry.exerciseId === ex.id) return;
+    const apply = () => setSession(s => ({ ...s,
+      entries: s.entries.map((e, i) => i !== idx ? e : swapEntryExercise(e, ex, previousSessions)) }));
+    if (entry.sets.some(set => set.done)) {
+      showConfirm({
+        title: 'Cambiar ejercicio',
+        body: `Las series ya completadas de ${exMap[entry.exerciseId]?.name || 'este ejercicio'} se perderán.`,
+        confirmLabel: 'Cambiar',
+        danger: true,
+        onConfirm: apply,
+      });
+    } else apply();
   };
 
   const updateEntry = (idx, patch) => {
     setSession(s => ({
       ...s,
-      entries: s.entries.map((e, i) => i !== idx ? e : { ...e, ...patch }),
+      entries: updateTrainingEntry(s.entries, idx, patch),
     }));
   };
 
@@ -207,11 +251,17 @@ export function WorkoutSession({ mode, session, setSession, exercises, exMap, on
       else recordEditTimer.current = setTimeout(() => setRecordAlert(alert), 700);
     }
     if (setBecameDone && !isEdit) {
-      // Trigger rest timer if exercise has restSeconds
-      if (entry?.restSeconds > 0) {
-        const ex = exMap[entry.exerciseId];
-        beginRest(entry.restSeconds, ex?.name || '');
-      }
+      const updated = session.entries.map((e, i) => i !== entryIdx ? e : {
+        ...e, sets: e.sets.map((set, si) => si === setIdx ? next : set),
+      });
+      const seconds = restAfterSet(updated, entryIdx, setIdx);
+      // Beating the same set of last time shows on the rest timer.
+      const reference = exerciseComparisons(previousSessions, entry.exerciseId, session.routineId).preferred;
+      const gain = setProgress(next, matchingSet(reference?.entry, setIdx), exMap[entry.exerciseId]?.type);
+      const progress = gain ? { setNumber: setIdx + 1, gain, date: reference.session.date,
+        exerciseName: exMap[entry.exerciseId]?.name || '' } : null;
+      if (seconds > 0) beginRest(seconds, supersetInfo(updated, entryIdx)
+        ? 'Superserie' : exMap[entry.exerciseId]?.name || '', progress);
     }
     return true;
   };
@@ -327,16 +377,23 @@ export function WorkoutSession({ mode, session, setSession, exercises, exMap, on
               showGhost={!isEdit}
               previousSessions={previousSessions}
               plateConfig={plateConfig}
-              isFirst={ei === 0}
-              isLast={ei === session.entries.length - 1}
+              isFirst={(supersetInfo(session.entries, ei)?.start ?? ei) === 0}
+              isLast={(supersetInfo(session.entries, ei)?.end ?? ei) === session.entries.length - 1}
+              superset={!!supersetInfo(session.entries, ei)}
+              supersetControls={<SupersetControls entries={session.entries} index={ei} exMap={exMap}
+                next={isEdit ? null : nextSupersetSet(session.entries, ei)}
+                onJoin={() => { dismissRest(); setSession(s => ({ ...s, entries: joinSuperset(s.entries, ei, `ss_${Date.now()}`) })); }}
+                onSplit={() => { dismissRest(); setSession(s => ({ ...s, entries: splitSuperset(s.entries, ei) })); }} />}
               onAddSet={() => addSet(ei)}
               onUpdateSet={(si, patch) => updateSet(ei, si, patch)}
               onRemoveSet={si => removeSet(ei, si)}
               onUpdateEntry={patch => updateEntry(ei, patch)}
               onRemove={() => removeEntry(ei)}
+              onReplace={() => setReplaceIndex(ei)}
+              dragProps={reorder.handleProps(blockOf(ei))}
               onMoveUp={() => moveEntry(ei, -1)}
               onMoveDown={() => moveEntry(ei, +1)}
-              onStartRestNow={isEdit ? null : () => startRest(entry.exerciseId)}
+              onStartRestNow={isEdit ? null : () => startRest(ei)}
               showConfirm={showConfirm}
             />
           );
@@ -364,6 +421,7 @@ export function WorkoutSession({ mode, session, setSession, exercises, exMap, on
           </button>
           {showSessionNotes && (
             <div className="px-4 pb-4">
+              {session.routineNotes && <p className="text-[11px] text-zinc-500 italic mb-2 whitespace-pre-wrap">Rutina: {session.routineNotes}</p>}
               <textarea
                 value={session.notes || ''}
                 onChange={e => setSession(s => ({ ...s, notes: e.target.value }))}
@@ -377,6 +435,12 @@ export function WorkoutSession({ mode, session, setSession, exercises, exMap, on
 
       </div>
 
+      {replaceIndex != null && (
+        <ExercisePicker exercises={exercises} title="CAMBIAR POR"
+          currentId={session.entries[replaceIndex]?.exerciseId}
+          onPick={ex => replaceEntry(replaceIndex, ex)} onClose={() => setReplaceIndex(null)} />
+      )}
+      {reorder.overlay}
       {pickerOpen && (
         <ExercisePicker exercises={exercises} onPick={addExercise} onClose={() => setPickerOpen(false)}
           onCreate={() => { setPickerOpen(false); setCreatingExercise(true); }} />
@@ -400,10 +464,8 @@ export function WorkoutSession({ mode, session, setSession, exercises, exMap, on
       {restTimer && restRemaining > 0 && (
         <RestTimerWidget
           timer={{ ...restTimer, secondsLeft: restRemaining }}
-          notificationEnabled={notificationEnabled}
-          onEnableNotification={() => {
-            void showRestNotification(restTimer, true).then(setNotificationEnabled);
-          }}
+          notificationState={notificationState}
+          onEnableNotification={() => publishRestNotification(restTimer, true)}
           onDismiss={dismissRest}
           onAdjust={adjustRest}
         />
@@ -470,24 +532,11 @@ export function DurationInput({ value, onChange }) {
 
 // Inline duration input — user types raw digits, we only re-format on blur (avoids cursor jump)
 
-// Tiny audio beep when rest finishes
-export function tryBeep() {
-  try {
-    const ctx = new (window.AudioContext || window.webkitAudioContext)();
-    const o = ctx.createOscillator();
-    const g = ctx.createGain();
-    o.connect(g); g.connect(ctx.destination);
-    o.type = 'sine'; o.frequency.value = 880;
-    g.gain.setValueAtTime(0.001, ctx.currentTime);
-    g.gain.exponentialRampToValueAtTime(0.3, ctx.currentTime + 0.02);
-    g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.6);
-    o.start(); o.stop(ctx.currentTime + 0.65);
-    setTimeout(() => ctx.close(), 800);
-  } catch {}
-  try { if (navigator.vibrate) navigator.vibrate([200, 80, 200]); } catch {}
+function vibrateRestEnd(recent) {
+  try { if (recent && navigator.vibrate) navigator.vibrate([200, 80, 200]); } catch {}
 }
 
-export function RestTimerWidget({ timer, notificationEnabled, onEnableNotification, onDismiss, onAdjust }) {
+export function RestTimerWidget({ timer, notificationState, onEnableNotification, onDismiss, onAdjust }) {
   const pct = timer.total > 0 ? ((timer.total - timer.secondsLeft) / timer.total) * 100 : 0;
   const endTime = new Date(timer.endsAt).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
   return (
@@ -495,7 +544,16 @@ export function RestTimerWidget({ timer, notificationEnabled, onEnableNotificati
       <div className="absolute inset-x-0 top-0 h-1 bg-zinc-800">
         <div className="h-full bg-lime-300 transition-all duration-1000 ease-linear" style={{ width: `${pct}%` }} />
       </div>
-      <div className="flex items-center gap-3 p-3 pt-4">
+      {timer.progress && (
+        <div role="status" className="rest-gain flex items-start gap-2 bg-lime-300/10 border-b border-lime-300/20 text-lime-300 text-xs font-semibold px-3 pt-3 pb-2">
+          <ArrowUp className="w-3.5 h-3.5 shrink-0 mt-px" strokeWidth={3} />
+          <span>
+            {timer.exerciseName === 'Superserie' && timer.progress.exerciseName ? `${timer.progress.exerciseName} · ` : ''}
+            Serie {timer.progress.setNumber} mejor que el {formatShort(timer.progress.date)} · <span className="font-mono">{timer.progress.gain}</span>
+          </span>
+        </div>
+      )}
+      <div className={`flex items-center gap-3 p-3 ${timer.progress ? '' : 'pt-4'}`}>
         <div className="bg-lime-300/15 text-lime-300 rounded-full p-2 shrink-0">
           <Timer className="w-5 h-5" />
         </div>
@@ -504,9 +562,17 @@ export function RestTimerWidget({ timer, notificationEnabled, onEnableNotificati
           <div className="font-mono text-2xl text-lime-300 leading-none">{fmtDur(timer.secondsLeft)}</div>
           {timer.exerciseName && <div className="text-[10px] text-zinc-500 truncate mt-0.5">{timer.exerciseName}</div>}
           <div className="text-[10px] text-zinc-400 mt-1">Termina a las {endTime}</div>
-          {!notificationEnabled && typeof Notification !== 'undefined' && Notification.permission !== 'denied' && (
+          {notificationState === 'pending' && <div role="status" className="text-[10px] text-zinc-400 mt-1">Enviando aviso…</div>}
+          {notificationState === 'shown' && <div role="status" className="text-[10px] text-zinc-400 mt-1">Aviso enviado a las notificaciones del móvil.</div>}
+          {['unavailable', 'failed'].includes(notificationState) && <div role="alert" className="text-[10px] text-amber-300 mt-1">
+            No se pudo mostrar el aviso fuera de la app, aunque tengas permiso.
+          </div>}
+          {notificationState === 'denied' && <div className="text-[10px] text-amber-300 mt-1">Las notificaciones están bloqueadas en el navegador.</div>}
+          {notificationState === 'unsupported' && <div className="text-[10px] text-amber-300 mt-1">Este navegador no admite avisos fuera de la app.</div>}
+          {['idle', 'permission', 'unavailable', 'failed', 'shown'].includes(notificationState) && (
             <button onClick={onEnableNotification} className="text-[10px] text-lime-300 underline mt-1">
-              Activar aviso fuera de la app
+              {notificationState === 'shown' ? 'Probar aviso otra vez' : ['failed', 'unavailable'].includes(notificationState)
+                ? 'Reintentar aviso' : 'Activar aviso fuera de la app'}
             </button>
           )}
         </div>
@@ -533,9 +599,26 @@ export function defaultSet(ex) {
   }
 }
 
-export function ExerciseEntryCard({ entry, exercise, routineId, showGhost, previousSessions, plateConfig, isFirst, isLast, onAddSet, onUpdateSet, onRemoveSet, onUpdateEntry, onRemove, onMoveUp, onMoveDown, onStartRestNow, showConfirm }) {
+export function ExerciseEntryCard({ entry, exercise, routineId, showGhost, previousSessions, plateConfig, isFirst, isLast, superset, supersetControls, dragProps, onAddSet, onUpdateSet, onRemoveSet, onUpdateEntry, onRemove, onReplace, onMoveUp, onMoveDown, onStartRestNow, showConfirm }) {
   const [showNotes, setShowNotes] = useState(!!entry.notes);
   const [showRestEdit, setShowRestEdit] = useState(false);
+  const [showHistory, setShowHistory] = useState(false);
+  useBackLayer(showHistory, () => setShowHistory(false));
+  useEffect(() => {
+    if (!showHistory) return;
+    const previousFocus = document.activeElement;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    const dialog = document.querySelector('[role="dialog"][data-exercise-history]');
+    dialog?.querySelector('button')?.focus();
+    const onKey = event => { if (event.key === 'Escape') setShowHistory(false); };
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('keydown', onKey);
+      document.body.style.overflow = previousOverflow;
+      previousFocus?.focus();
+    };
+  }, [showHistory]);
 
   const comparison = useMemo(() =>
     exerciseComparisons(previousSessions, exercise.id, routineId),
@@ -548,33 +631,40 @@ export function ExerciseEntryCard({ entry, exercise, routineId, showGhost, previ
 
   return (
     <div className="bg-zinc-900 border border-zinc-800 rounded-2xl overflow-hidden">
-      <div className="flex items-center justify-between p-4 border-b border-zinc-800 gap-2">
-        <div className="flex flex-col -ml-1 shrink-0">
-          <button onClick={onMoveUp} disabled={isFirst} className="text-zinc-500 hover:text-lime-300 disabled:opacity-20 disabled:hover:text-zinc-500 p-0.5" aria-label="Subir">
-            <ArrowUp className="w-3.5 h-3.5" strokeWidth={3} />
-          </button>
-          <button onClick={onMoveDown} disabled={isLast} className="text-zinc-500 hover:text-lime-300 disabled:opacity-20 disabled:hover:text-zinc-500 p-0.5" aria-label="Bajar">
-            <ArrowDown className="w-3.5 h-3.5" strokeWidth={3} />
-          </button>
+      {showHistory && <div role="dialog" data-exercise-history aria-modal="true" aria-label={`Historial de ${exercise.name}`}
+        className="fixed inset-0 z-50 bg-zinc-950/90 backdrop-blur-sm">
+        <div className="max-w-md mx-auto h-full overflow-y-auto overscroll-contain bg-zinc-950">
+          <ExerciseDetail exercise={exercise} sessions={previousSessions} onBack={() => setShowHistory(false)} />
         </div>
+      </div>}
+      <div {...dragProps} className="flex items-center justify-between p-4 border-b border-zinc-800 gap-2">
+        {!(isFirst && isLast) && <DragHandle onMoveUp={() => !isFirst && onMoveUp()} onMoveDown={() => !isLast && onMoveDown()} />}
         <div className="flex-1 min-w-0">
           <div className="font-display text-xl leading-tight">{exercise.name.toUpperCase()}</div>
           <div className="text-[10px] text-zinc-500 uppercase tracking-wide mt-0.5">
             {MUSCLE_GROUPS[exercise.muscleGroup] || exercise.muscleGroup} • {exercise.equipment}
           </div>
         </div>
+        {onReplace && <button onClick={onReplace} className="text-zinc-500 hover:text-lime-300 p-1 shrink-0" aria-label="Cambiar ejercicio">
+          <ArrowLeftRight className="w-4 h-4" />
+        </button>}
         <button onClick={onRemove} className="text-zinc-500 hover:text-red-400 p-1 shrink-0" aria-label="Quitar ejercicio">
           <Trash2 className="w-4 h-4" />
         </button>
       </div>
 
       {/* Rest + notes mini-toolbar */}
+      {supersetControls}
       <div className="flex items-center gap-1 px-3 pt-3 flex-wrap">
+        <button onClick={() => setShowHistory(true)}
+          className="text-[10px] uppercase tracking-wider font-bold px-2 py-1 rounded-full bg-zinc-800 text-zinc-300 hover:text-lime-300">
+          Historial de series
+        </button>
         <button
           onClick={() => setShowRestEdit(v => !v)}
           className={`flex items-center gap-1 text-[10px] uppercase tracking-wider font-bold px-2 py-1 rounded-full transition ${entry.restSeconds > 0 ? 'bg-lime-300/15 text-lime-300' : 'bg-zinc-800 text-zinc-400 hover:text-zinc-200'}`}
         >
-          <Timer className="w-3 h-3" /> {entry.restSeconds > 0 ? fmtDur(entry.restSeconds) : 'Descanso'}
+          <Timer className="w-3 h-3" /> {superset ? 'Entre rondas: ' : ''}{entry.restSeconds > 0 ? fmtDur(entry.restSeconds) : 'Descanso'}
         </button>
         <button
           onClick={() => setShowNotes(v => !v)}
@@ -615,12 +705,15 @@ export function ExerciseEntryCard({ entry, exercise, routineId, showGhost, previ
         </div>
       )}
 
+      {entry.routineNote && (
+        <p className="px-3 pt-2 text-[11px] text-zinc-500 italic whitespace-pre-wrap">Rutina: {entry.routineNote}</p>
+      )}
       {showNotes && (
         <div className="px-3 pt-2">
           <textarea
             value={entry.notes || ''}
             onChange={e => onUpdateEntry({ notes: e.target.value })}
-            placeholder="Notas para este ejercicio (técnica, sensaciones...)"
+            placeholder="Notas de hoy para este ejercicio (sensaciones, técnica...). Las verás en el historial de series."
             rows={2}
             className="w-full bg-zinc-800 border border-zinc-700 rounded px-2 py-1.5 text-xs outline-none focus:border-lime-300/50 resize-none"
           />
@@ -636,7 +729,8 @@ export function ExerciseEntryCard({ entry, exercise, routineId, showGhost, previ
             set={s}
             type={exercise.type}
             unit={exercise.distanceUnit}
-            previous={lastSession?.sets[si]}
+            previous={matchingSet(comparison.preferred?.entry, si)}
+            previousDate={lastSession?.date}
             ghost={showGhost ? (s.done ? s.ghost || null : predictGhost({ exercise, setIndex: si,
               sessions: previousSessions, routineId, targetSet: s, currentEntry: entry })) : null}
             plateConfig={showPlates ? plateConfig : null}
@@ -691,7 +785,8 @@ export function SetHeader({ type, unit, editable = true }) {
   );
 }
 
-export function SetRow({ idx, set, type, unit, previous, ghost, plateConfig, onUpdate, onRemove, showConfirm }) {
+export function SetRow({ idx, set, type, unit, previous, previousDate, ghost, plateConfig, onUpdate, onRemove, showConfirm }) {
+  const progress = setProgress(set, previous, type);
   const placeholder = previous ? {
     weight: previous.weight ? String(previous.weight) : '',
     reps: previous.reps ? String(previous.reps) : '',
@@ -749,6 +844,9 @@ export function SetRow({ idx, set, type, unit, previous, ghost, plateConfig, onU
 
   return (
     <div className="flex flex-col">
+      {previous && <div className="text-[10px] text-zinc-400 pl-12 pb-0.5">
+        Serie {idx + 1} anterior{previousDate ? ` · ${formatShort(previousDate)}` : ''}: {setBrief(previous, type)}
+      </div>}
       {ghost && !set.done && <div className="text-[10px] text-lime-300/80 font-mono pl-12 pb-0.5">
         GHOST: {setBrief(ghost, type)}
       </div>}
@@ -799,8 +897,16 @@ export function SetRow({ idx, set, type, unit, previous, ghost, plateConfig, onU
         </div>
       )}
       {set.done && set.personalRecords?.length > 0 && (
-        <div className="text-[10px] font-bold text-amber-300 pl-12 pb-1">★ RÉCORD PERSONAL</div>
+        <div className="text-[10px] font-bold text-amber-300 pl-12 pb-1">
+          ★ {set.personalRecords.every(record => record.kind === 'first') ? 'PRIMERA MARCA'
+            : set.personalRecords.some(record => record.kind === 'estimated1RM') ? 'RÉCORD PERSONAL · TU MEJOR SERIE (1RM ESTIMADO)'
+            : 'RÉCORD PERSONAL'}
+          <div className="font-normal">{set.personalRecords.map(record => `${record.label}: ${record.detail}`).join(' · ')}</div>
+        </div>
       )}
+      {progress && <div className="text-[10px] text-lime-300 pl-12 pb-1">
+        ▲ Superaste la serie {idx + 1}{previousDate ? ` del ${formatShort(previousDate)}` : ' anterior'} · {progress}
+      </div>}
     </div>
   );
 }
@@ -875,6 +981,7 @@ export function SessionDetail({ session, exMap, onBack, onDelete, onEdit, onRepe
             return (
               <div key={i} className="bg-zinc-900 border border-zinc-800 rounded-2xl overflow-hidden">
                 <div className="px-4 py-3 border-b border-zinc-800">
+                  <SupersetBadge entries={session.entries} index={i} />
                   <div className="font-display text-lg leading-tight">{ex.name.toUpperCase()}</div>
                   <div className="text-[10px] text-zinc-500 uppercase tracking-wide mt-0.5 flex items-center gap-2 flex-wrap">
                     <span>{MUSCLE_GROUPS[ex.muscleGroup] || ex.muscleGroup}</span>

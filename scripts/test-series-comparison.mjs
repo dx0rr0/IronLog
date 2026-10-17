@@ -1,0 +1,32 @@
+import assert from 'node:assert/strict';
+import { exerciseMatches } from '../src/domain/exercises/catalog.js';
+import { exerciseHistory, matchingSet, predictGhost, repeatSession } from '../src/domain/training/workout-intelligence.js';
+import { setProgress, detectSetRecords } from '../src/domain/training/records.js';
+import { routineDraftFromSession } from '../src/domain/training/routine-from-session.js';
+const exercise = { id: 'test', name: 'Extensión', muscleGroup: 'triceps', equipment: 'Polea', type: 'weight_reps' };
+assert.equal(exerciseMatches(exercise, 'tríceps'), true);
+assert.equal(exerciseMatches(exercise, 'triceps polea'), true);
+assert.equal(exerciseMatches(exercise, 'biceps'), false);
+const sets = [{ weight: 60, reps: 12, done: true }, { weight: 60, reps: 8, done: true },
+  { weight: 60, reps: 6, done: false }];
+const session = { id: 'last', date: '2026-09-27', entries: [{ exerciseId: 'test', sets }] };
+assert.equal(matchingSet(session.entries[0], 1), sets[1]);
+assert.equal(matchingSet(session.entries[0], 2), null);
+assert.equal(matchingSet(session.entries[0], 3), null);
+assert.equal(predictGhost({ exercise, setIndex: 3, sessions: [session] }), null);
+const current = { weight: 60, reps: 9, done: true };
+assert.equal(setProgress(current, sets[1], exercise.type), '+1 reps con el mismo peso');
+assert.equal(setProgress(current, sets[0], exercise.type), null);
+assert.deepEqual(detectSetRecords({ exercise, set: current, previousSessions: [session] }), [],
+  'beating the second set is not an all-time record');
+assert.equal(setProgress({ ...current, done: false }, sets[1], exercise.type), null);
+assert.equal(setProgress(current, { ...sets[1], done: false }, exercise.type), null);
+assert.match(setProgress({ weight: 70, reps: 10, done: true }, sets[1], exercise.type), /1RM estimado/);
+const double = { id: 'older', date: '2026-09-20', entries: [session.entries[0], session.entries[0]] };
+assert.deepEqual(exerciseHistory([double, session], exercise.id).map(item => item.session.id), ['last', 'older', 'older']);
+assert.equal(repeatSession(session, { test: exercise }).entries[0].restSeconds, 120);
+assert.equal(routineDraftFromSession(session, { test: exercise }).exercises[0].restSeconds, 120);
+session.entries[0].restSeconds = 0;
+assert.equal(repeatSession(session, { test: exercise }).entries[0].restSeconds, 0);
+assert.equal(routineDraftFromSession(session, { test: exercise }).exercises[0].restSeconds, 0);
+console.log('Muscle search, ordinal comparisons, history and rest defaults passed');

@@ -12,8 +12,38 @@ App personal para registrar entrenamientos: rutinas, series con RIR, autorrellen
 
 Consulta [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) para las dependencias entre capas y el flujo de datos. `dist/` y `node_modules/` son archivos generados y no se versionan.
 
-## Cambios de la versión 1.6.0 (pendiente de despliegue)
+## Cambios de la versión 1.9.0
 
+- Los ejercicios se reordenan manteniendo pulsada su cabecera y arrastrando. Las superseries se mueven como un bloque.
+- Nuevo botón para cambiar un ejercicio por otro sin perder su posición, descanso ni número de series.
+- Las notas de cada ejercicio empiezan vacías en cada sesión. Las notas de días anteriores aparecen en el historial de series; la nota de la rutina se muestra como referencia.
+- Al terminar el descanso suena un aviso de tres notas, también con la app en segundo plano mientras el navegador mantenga el audio activo.
+- Si una serie mejora la misma serie de la sesión anterior, el temporizador de descanso lo indica en una franja encima del contador.
+
+## Cambios de la versión 1.8.1 (publicada el 4 de octubre de 2026)
+
+- El gesto o botón Atrás de Android recorre las pantallas visitadas dentro de IronLog. Las flechas de la app consumen el mismo historial; no añaden pasos vacíos.
+- Atrás cierra primero el buscador, la creación de ejercicios dentro del entrenamiento, el historial de series y los diálogos. También cierra los editores de discos y peso corporal y los avisos de récord.
+- Volver desde un entrenamiento activo conserva la sesión, las series y la fecha de fin del descanso; se puede continuar desde el menú.
+- Los editores de rutinas con cambios y de entrenamientos terminados piden confirmación antes de descartarse. Guardar o descartar una edición de entrenamiento regresa a su detalle.
+- El resumen sustituye al entrenamiento terminado en el historial. En el inicio, Atrás conserva el comportamiento normal del sistema para salir.
+
+## Cambios de la versión 1.8.0 (publicada el 4 de octubre de 2026)
+
+- Buscar por nombre, material, alias o grupo muscular; cada resultado muestra su grupo.
+- Historial de series desde la tarjeta del entrenamiento, con fecha, número original de serie, peso/reps y RIR. Solo incluye series completadas y no interrumpe el entrenamiento.
+- Descanso inicial de 2 minutos en nuevos ejercicios y plantillas sin tiempo guardado. Un descanso configurado, incluido 0, se conserva.
+- Comparación estricta por posición (serie 2 con serie 2), con resultado real y fecha de referencia. Ghost sigue siendo una propuesta separada y no usa otra posición cuando falta esa serie.
+- Se distingue superar la serie anterior de un récord del historial: mayor peso, repeticiones con el mismo peso o mejor 1RM estimado. La primera marca se identifica por separado.
+- Migración de datos del antiguo localStorage a IndexedDB cuando falta la clave. Los ejercicios personalizados se fusionan por ID al leer y guardar, conservando altas y archivados; los cambios nuevos llevan updatedAt. Una transacción evita sobrescrituras entre pestañas y se mantiene una segunda copia local de ejercicios. Importar JSON también fusiona por ID y versión. El borrado explícito elimina ambos almacenes.
+- La conservación es local y requiere usar el mismo dominio y navegador. No recupera datos eliminados ni transfiere automáticamente datos desde una URL de preview: para cambiar de dominio se necesita exportar/importar una copia.
+
+## Cambios de la versión 1.7.0 (incluidos en 1.8.0)
+
+- Superseries en rutinas y entrenamientos: añade al menos dos ejercicios y pulsa **Superserie con siguiente**. Puedes añadir más ejercicios consecutivos, deshacer la agrupación y moverla como bloque. Cada tarjeta muestra su posición en la superserie; durante el entrenamiento se indica el siguiente ejercicio y serie de la ronda. El descanso compartido se inicia solo cuando se completa la ronda, incluso si marcas sus series en otro orden o hay distintos números de series. Las superseries se conservan en el historial, al repetir, al crear una rutina desde una sesión y en las copias JSON.
+- El aviso de inicio de descanso respeta los ajustes de sonido y vibración del móvil, en lugar de forzarse como silencioso. Las actualizaciones del mismo descanso siguen siendo silenciosas. Ya no se borra desde la limpieza de la pantalla: se cierra al saltar el descanso, al terminarlo con la app visible o al guardar/descartar la sesión. Al tocarlo se abre o enfoca IronLog. La interfaz distingue permiso concedido de envío correcto y permite reintentar si falla.
+
+## Cambios de la versión 1.6.0
 - El entrenamiento vuelve a mostrar todos los ejercicios y series a la vez. Ghost y récords siguen disponibles en cada serie.
 - El buscador de ejercicios permite crear uno desde una sesión activa o el editor de rutinas. Se guarda en el catálogo local y se añade a la sesión o plantilla.
 - El descanso guarda su hora de finalización con la sesión. Al volver a la app, el contador refleja el tiempo transcurrido. Si el sistema permite notificaciones y el usuario concede permiso, muestra un aviso con la hora de fin. Una PWA no puede garantizar un aviso justo al terminar si el sistema la suspende o cierra.
@@ -27,7 +57,7 @@ Consulta [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) para las dependencias entr
 - Aviso animado al confirmar una serie que supera una marca anterior de peso, repeticiones con el mismo peso o 1RM estimado. También se reconocen marcas de repeticiones, duración y distancia cuando el tipo de ejercicio corresponde.
 - La meta semanal se incluye en la exportación JSON (formato v4). Las copias anteriores siguen pudiendo importarse.
 
-La versión 1.5.0 ya está desplegada en Vercel. Los cambios posteriores se desplegarán solo cuando lo solicites.
+La versión 1.6.0 está desplegada en Vercel. Los cambios posteriores se desplegarán solo cuando lo solicites.
 
 ## Cambios de la versión 1.4.0
 

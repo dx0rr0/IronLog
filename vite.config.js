@@ -35,6 +35,7 @@ export default defineConfig({
         ],
       },
       workbox: {
+        importScripts: ['rest-notification-worker.js'],
         globPatterns: ['**/*.{js,css,html,svg,png,ico,webmanifest}'],
       },
     }),

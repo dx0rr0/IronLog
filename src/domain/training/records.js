@@ -4,6 +4,29 @@ const positive = value => value !== '' && value !== null && value !== undefined 
   Number.isFinite(Number(value)) && Number(value) > 0 ? Number(value) : null;
 const greater = (value, previous) => value > previous + 0.001;
 
+// Session progress is independent of an all-time record. Compare the same
+// ordinal set only; a higher strength estimate is labelled as an estimate.
+export function setProgress(set, previous, type) {
+  if (!set?.done || !previous?.done) return null;
+  if (type === 'weight_reps') {
+    const weight = positive(set.weight), reps = positive(set.reps);
+    const oldWeight = positive(previous.weight), oldReps = positive(previous.reps);
+    if (!weight || !reps || !oldWeight || !oldReps) return null;
+    if (Math.abs(weight - oldWeight) < 0.001) {
+      return greater(reps, oldReps) ? `+${reps - oldReps} reps con el mismo peso` : null;
+    }
+    const before = epley(oldWeight, oldReps), after = epley(weight, reps);
+    return greater(after, before)
+      ? `1RM estimado +${Math.round((after / before - 1) * 1000) / 10}%` : null;
+  }
+  const field = type === 'reps' ? 'reps' : type === 'duration' ? 'duration'
+    : type === 'distance_duration' ? 'distance' : null;
+  const value = field && positive(set[field]), before = field && positive(previous[field]);
+  if (!value || !before || !greater(value, before)) return null;
+  return type === 'reps' ? `+${value - before} reps` : type === 'duration'
+    ? `+${value - before} s` : 'Mayor distancia';
+}
+
 export function detectSetRecords({ exercise, set, previousSessions = [], currentSession = null,
   entryIndex = -1, setIndex = -1 }) {
   if (!exercise || !set?.done) return [];

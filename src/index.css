@@ -53,6 +53,12 @@ body {
 }
 .record-sparks i:nth-child(3n) { background: #d4ff37; }
 .record-sparks i:nth-child(4n) { background: #fff; }
+@keyframes rest-gain {
+  from { opacity: 0; max-height: 0; }
+  to { opacity: 1; max-height: 4rem; }
+}
+.rest-gain { overflow: hidden; animation: rest-gain 0.35s ease-out 0.25s both; }
 @media (prefers-reduced-motion: reduce) {
+  .rest-gain { animation: none; }
   .record-celebration, .record-trophy, .record-sparks i, .record-screen-flash, .record-countdown { animation: none; }
 }

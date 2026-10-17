@@ -8,6 +8,8 @@
 // the original window.storage shape so the rest of the app is untouched.
 // ---------------------------------------------------------------
 
+import { mergeCustomExercises } from '../../domain/exercises/custom-exercises.js';
+
 const DB_NAME = 'ironlog';
 const STORE_NAME = 'kv';
 const DB_VERSION = 1;
@@ -65,6 +67,55 @@ async function idbDel(key) {
   });
 }
 
+const decode = value => typeof value === 'string' ? JSON.parse(value) : value;
+const readLocal = key => {
+  if (typeof localStorage === 'undefined') return null;
+  const raw = localStorage.getItem(key);
+  return raw == null ? null : JSON.parse(raw);
+};
+
+// Read and merge in a single readwrite transaction. Two tabs adding exercises
+// cannot replace each other's collections with stale snapshots.
+async function idbUpsertCustom(incoming) {
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORE_NAME, 'readwrite');
+    const store = tx.objectStore(STORE_NAME);
+    const req = store.get('custom-exercises');
+    let merged;
+    let error;
+    req.onsuccess = () => {
+      try {
+        const existing = decode(req.result);
+        let legacy;
+        try { legacy = readLocal('custom-exercises'); }
+        catch (e) {
+          // Some browsers allow IDB but block Web Storage. Keep primary data
+          // usable; malformed JSON still stops the merge to avoid data loss.
+          if (existing !== undefined && e.name === 'SecurityError') legacy = null;
+          else throw e;
+        }
+        merged = mergeCustomExercises(existing, legacy, incoming);
+        store.put(JSON.stringify(merged), 'custom-exercises');
+      } catch (e) { error = e; tx.abort(); }
+    };
+    tx.oncomplete = () => resolve(merged);
+    tx.onerror = tx.onabort = () => reject(error || tx.error);
+  });
+}
+
+function mirrorCustom(value) {
+  try {
+    if (typeof localStorage !== 'undefined') {
+      localStorage.setItem('custom-exercises', JSON.stringify(value));
+    }
+  } catch (e) {
+    // The primary transaction has committed; a blocked/full secondary store
+    // must not make a successfully saved exercise appear to have failed.
+    console.warn('Custom exercise secondary copy unavailable', e);
+  }
+}
+
 // Decide once whether to use IDB or fall back to localStorage
 let useIDB = null;
 const writeQueues = new Map();
@@ -96,9 +147,24 @@ export const storage = {
       // A read after a queued write should see the latest value.
       await writeQueues.get(key)?.catch(() => {});
       if (await detectBackend()) {
-        const v = await idbGet(key);
-        if (v === undefined) return null;
-        return typeof v === 'string' ? JSON.parse(v) : v;
+        if (key === 'custom-exercises') {
+          return await queueWrite(key, async () => {
+            const merged = await idbUpsertCustom([]);
+            mirrorCustom(merged);
+            return merged;
+          });
+        }
+        return await queueWrite(key, async () => {
+          const v = await idbGet(key);
+          if (v !== undefined) return decode(v);
+          // Recover data written by the fallback backend before IDB worked.
+          const legacy = readLocal(key);
+          if (legacy !== null) {
+            await idbSet(key, JSON.stringify(legacy));
+            localStorage.removeItem(key);
+          }
+          return legacy;
+        });
       }
       const raw = localStorage.getItem(key);
       return raw ? JSON.parse(raw) : null;
@@ -113,8 +179,16 @@ export const storage = {
   async set(key, value) {
     try {
       await queueWrite(key, async () => {
-        if (await detectBackend()) await idbSet(key, JSON.stringify(value));
-        else localStorage.setItem(key, JSON.stringify(value));
+        if (await detectBackend()) {
+          if (key === 'custom-exercises') {
+            const merged = await idbUpsertCustom(value);
+            mirrorCustom(merged);
+          } else await idbSet(key, JSON.stringify(value));
+        } else {
+          const saved = key === 'custom-exercises'
+            ? mergeCustomExercises(readLocal(key), value) : value;
+          localStorage.setItem(key, JSON.stringify(saved));
+        }
       });
       return true;
     } catch (e) {
@@ -127,7 +201,7 @@ export const storage = {
     try {
       await queueWrite(key, async () => {
         if (await detectBackend()) await idbDel(key);
-        else localStorage.removeItem(key);
+        if (typeof localStorage !== 'undefined') localStorage.removeItem(key);
       });
       return true;
     } catch (e) {

@@ -1,0 +1,93 @@
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import { JSDOM, VirtualConsole } from 'jsdom';
+import 'fake-indexeddb/auto';
+import { storage } from '../src/infrastructure/storage/storage.js';
+const assetDir = new URL('../dist/assets/', import.meta.url);
+const code = fs.readFileSync(new URL(fs.readdirSync(assetDir).find(name => /^index-.*\.js$/.test(name)), assetDir), 'utf8');
+await storage.set('weekly-goal', 3);
+await storage.set('sessions', [{ id: 'previous', name: 'Sesión previa', date: '2026-10-01T12:00:00Z', duration: 100,
+  entries: [{ exerciseId: 'press_banca', restSeconds: 0, sets: [{ weight: 60, reps: 8, done: true }] }] }]);
+const deadline = Date.now() + 120000;
+await storage.set('current-session', { id: 'live', name: 'Entrenamiento de prueba', date: new Date().toISOString(), startedAt: Date.now(),
+  restTimer: { endsAt: deadline, total: 120, exerciseName: 'Press de banca' },
+  entries: [{ exerciseId: 'press_banca', restSeconds: 0, sets: [{ weight: 60, reps: 8, done: true }] }] });
+const errors = [];
+const vc = new VirtualConsole();
+vc.on('jsdomError', e => errors.push(e.message));
+vc.on('error', (...args) => errors.push(args.join(' ')));
+const dom = new JSDOM('<!doctype html><html><body><div id="root"></div></body></html>', {
+  url: 'https://ironlog.test/', runScripts: 'outside-only', pretendToBeVisual: true, virtualConsole: vc,
+});
+const { window } = dom;
+window.ResizeObserver = class { observe() {} unobserve() {} disconnect() {} };
+window.indexedDB = globalThis.indexedDB;
+window.IDBKeyRange = globalThis.IDBKeyRange;
+window.navigator.serviceWorker = { register: () => Promise.resolve({ scope: '/' }), ready: Promise.resolve({ scope: '/' }), addEventListener() {} };
+Object.defineProperty(window.navigator, 'storage', { value: { persist: async () => true, persisted: async () => true, estimate: async () => ({ usage: 1024, quota: 1000000 }) } });
+window.eval(code);
+const settle = () => new Promise(resolve => setTimeout(resolve, 100));
+const waitFor = async predicate => {
+  for (let i = 0; i < 40; i++) { if (await predicate()) return; await settle(); }
+  throw new Error(`Navigation timed out: ${window.document.body.textContent.slice(-1200)} ${JSON.stringify([...window.document.querySelectorAll('input')].map(el => el.placeholder))} ${errors.join('; ')}`);
+};
+const button = label => [...window.document.querySelectorAll('button')].find(el => el.textContent.includes(label));
+const body = () => window.document.body.textContent;
+const back = async () => { window.history.back(); await settle(); };
+const inputValue = (input, value) => {
+  Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set.call(input, value);
+  input.dispatchEvent(new window.Event('input', { bubbles: true }));
+};
+await waitFor(() => button('CONTINUAR'));
+button('CONTINUAR').click();
+await waitFor(() => button('Historial de series'));
+button('Historial de series').click();
+await waitFor(() => window.document.querySelector('[data-exercise-history]'));
+await back();
+assert.equal(window.document.querySelector('[data-exercise-history]'), null);
+assert.ok(button('FIN'));
+button('AÑADIR EJERCICIO').click();
+await waitFor(() => button('CREAR'));
+await back();
+assert.equal(window.document.querySelector('input[placeholder="Buscar ejercicio o grupo muscular..."]'), null);
+assert.ok(button('FIN'));
+button('AÑADIR EJERCICIO').click(); await waitFor(() => button('CREAR'));
+button('CREAR').click(); await waitFor(() => button('GUARDAR EJERCICIO'));
+await back(); await waitFor(() => button('CREAR'));
+assert.ok(window.document.querySelector('input[placeholder="Buscar ejercicio o grupo muscular..."]'));
+await back(); await waitFor(() => button('FIN'));
+await back(); await waitFor(() => button('CONTINUAR'));
+assert.equal((await storage.get('current-session')).entries[0].sets[0].done, true);
+assert.equal((await storage.get('current-session')).restTimer.endsAt, deadline);
+button('CONTINUAR').click(); await waitFor(() => button('FIN'));
+window.document.querySelector('button[aria-label="Cerrar"]').click();
+await waitFor(() => body().includes('Descartar entrenamiento'));
+await back();
+assert.equal(body().includes('Descartar entrenamiento'), false);
+assert.ok(button('FIN')); assert.equal((await storage.get('current-session')).id, 'live');
+await back(); await waitFor(() => button('CONTINUAR'));
+button('EJERC.').click(); await waitFor(() => button('Press de banca'));
+button('Press de banca').click(); await waitFor(() => body().includes('HISTORIAL'));
+await back(); await waitFor(() => button('Press de banca'));
+await back(); await waitFor(() => button('CONTINUAR'));
+button('RUTINAS').click(); await waitFor(() => button('CREAR'));
+button('CREAR').click(); await waitFor(() => window.document.querySelector('input[placeholder^="Ej: Pecho"]'));
+inputValue(window.document.querySelector('input[placeholder^="Ej: Pecho"]'), 'Rutina sin guardar');
+await settle(); await back(); await waitFor(() => body().includes('Descartar cambios'));
+assert.equal(window.document.querySelector('input[placeholder^="Ej: Pecho"]').value, 'Rutina sin guardar');
+await back(); assert.equal(body().includes('Descartar cambios'), false);
+assert.equal(window.document.querySelector('input[placeholder^="Ej: Pecho"]').value, 'Rutina sin guardar');
+await back(); await waitFor(() => button('Descartar'));
+button('Descartar').click(); await waitFor(() => button('CREAR') && !body().includes('NUEVA RUTINA'));
+assert.deepEqual(await storage.get('routines'), []);
+await back(); await waitFor(() => button('Sesión previa'));
+button('Sesión previa').click(); await waitFor(() => button('EDITAR'));
+button('EDITAR').click(); await waitFor(() => window.document.querySelector('input[type="datetime-local"]'));
+inputValue(window.document.querySelector('input[inputmode="decimal"]'), '70'); await settle();
+await back(); await waitFor(() => button('Descartar'));
+button('Descartar').click(); await waitFor(() => body().includes('DETALLE'));
+assert.equal((await storage.get('sessions'))[0].entries[0].sets[0].weight, 60);
+assert.equal((await storage.get('current-session')).id, 'live');
+assert.deepEqual(errors, []);
+window.close();
+console.log('Android back across tabs, details, overlays, nested creation, live rest and dirty editors passed');

@@ -1,9 +1,11 @@
 import React, { useEffect, useState } from 'react';
+import { useBackLayer } from '../../shared/BrowserNavigation.jsx';
 import { Award, Check, Target, Trophy, X } from 'lucide-react';
 
 const WEEK_LABELS = ['L', 'M', 'X', 'J', 'V', 'S', 'D'];
 
 export function WeeklyGoalSetup({ onSave, onDismiss }) {
+  useBackLayer(true, onDismiss);
   const [days, setDays] = useState(3);
   return (
     <div className="fixed inset-0 z-[70] bg-zinc-950/90 backdrop-blur-md flex items-center justify-center p-5 anim-fade">
@@ -82,6 +84,7 @@ export function GoalCelebration({ message, goal }) {
 }
 
 export function RecordCelebration({ alert, onClose }) {
+  useBackLayer(!!alert, onClose);
   useEffect(() => {
     if (!alert) return undefined;
     const timer = setTimeout(onClose, 2000);
