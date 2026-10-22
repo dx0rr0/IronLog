@@ -42,7 +42,8 @@ export function RestEditor({ entry, superset, onUpdate }) {
 // One-tap presets plus "⋯" for any other time, typed in place.
 function RestSegments({ label, value, presets, onChange }) {
   const [typing, setTyping] = useState(false);
-  const custom = !presets.includes(value);
+  // 0 means no rest: the header says so and no segment lights up.
+  const custom = value !== 0 && !presets.includes(value);
   const segment = active => `flex-1 min-w-0 py-1.5 rounded-md text-[11px] font-bold whitespace-nowrap transition ${active ? 'bg-lime-300 text-zinc-950' : 'text-zinc-400 hover:text-zinc-200'}`;
   return (
     <div>
@@ -58,7 +59,7 @@ function RestSegments({ label, value, presets, onChange }) {
           </button>
         ))}
         {typing ? (
-          <DurField value={value} autoFocus aria-label={`${label}: otro tiempo`}
+          <DurField value={value} autoFocus keepOnEmpty aria-label={`${label}: otro tiempo`}
             onChange={v => { setTyping(false); onChange(v); }}
             className="flex-1 min-w-0 bg-zinc-800 rounded-md text-[11px] font-mono text-zinc-100 text-center outline-none placeholder:text-zinc-500" />
         ) : (

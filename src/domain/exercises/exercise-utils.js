@@ -185,17 +185,19 @@ export function bodyWeightDelta(bodyWeights, days) {
   return Number((current.kg - baseline.kg).toFixed(2));
 }
 
-// Body-weight entries within the last `days` days (null = all), oldest
-// first, ready to chart. The window is anchored to the latest entry so an
-// old log still shows something.
-export function bodyWeightSeries(bodyWeights, days = null) {
+// A body-weight entry needs a parseable date and a numeric weight.
+export const isValidBodyWeight = b => !!b && Number.isFinite(new Date(b.date).getTime()) && Number.isFinite(Number(b.kg));
+
+// Body-weight entries from the last `days` days up to `now` (days = null:
+// all), oldest first, ready to chart.
+export function bodyWeightSeries(bodyWeights, days = null, now = Date.now()) {
   if (!Array.isArray(bodyWeights) || !bodyWeights.length) return [];
   const sorted = bodyWeights
-    .filter(b => b && b.date && Number.isFinite(Number(b.kg)))
+    .filter(isValidBodyWeight)
     .map(b => ({ date: b.date, kg: Number(b.kg) }))
     .sort((a, b) => new Date(a.date) - new Date(b.date));
-  if (!days || !sorted.length) return sorted;
-  const cutoff = new Date(sorted[sorted.length - 1].date).getTime() - days * 24 * 3600 * 1000;
+  if (!days) return sorted;
+  const cutoff = now - days * 24 * 3600 * 1000;
   return sorted.filter(b => new Date(b.date).getTime() >= cutoff);
 }
 

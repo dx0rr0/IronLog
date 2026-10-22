@@ -67,6 +67,8 @@ console.log('\nmerging keeps what is already on the device');
   ok('old backup without weights keeps device weights', eq(noExtras.bodyWeights, device.bodyWeights));
   ok('old backup without plates keeps device plates', eq(noExtras.plateConfig, device.plateConfig));
   ok('old backup without goal keeps device goal', noExtras.weeklyGoal === 3);
+  const badDates = mergeBackup(device, { sessions: [], bodyWeights: [{ date: '22/10/2026', kg: 80 }, { date: '2026-10-22T08:00:00Z', kg: 79.5 }] });
+  ok('weights with unparseable dates are not imported', eq(badDates.bodyWeights.map(b => b.kg), [79.5, 79.9, 80.6]), badDates.bodyWeights);
 }
 
 console.log('\ninvalid files');

@@ -57,7 +57,13 @@ export const showRestNotification = async (timer, requestPermission = false, ann
     if (!worker?.showNotification) return { status: 'unavailable' };
     return await enqueue(async () => {
       if (version !== notificationVersion) return { status: 'cancelled' };
-      if (!timer || timer.endsAt <= Date.now()) return { status: 'expired' };
+      if (!timer || timer.endsAt <= Date.now()) {
+        tellWorker(worker, { type: 'rest-cancel' });
+        return { status: 'expired' };
+      }
+      // Hand over the new deadline first: even if showing the notification
+      // fails, the previous rest's deadline must not stay scheduled.
+      tellWorker(worker, { type: 'rest-schedule', endsAt: timer.endsAt, exerciseName: timer.exerciseName || '' });
       const endTime = new Date(timer.endsAt).toLocaleTimeString('es-ES', {
         hour: '2-digit', minute: '2-digit', second: '2-digit',
       });
@@ -71,9 +77,6 @@ export const showRestNotification = async (timer, requestPermission = false, ann
         ...(announce ? { renotify: true } : { silent: true }),
         data: { url: '/', endsAt: timer.endsAt },
       });
-      if (version === notificationVersion) {
-        tellWorker(worker, { type: 'rest-schedule', endsAt: timer.endsAt, exerciseName: timer.exerciseName || '' });
-      }
       return { status: version === notificationVersion ? 'shown' : 'cancelled' };
     });
   } catch (error) {

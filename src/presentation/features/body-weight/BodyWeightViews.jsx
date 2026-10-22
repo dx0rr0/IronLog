@@ -145,7 +145,7 @@ export function BodyWeightProgress({ bodyWeights }) {
 
       {summary && (
         <div className="grid grid-cols-3 gap-2 mb-3">
-          <SummaryTile label="Actual" value={fmtKg(summary.last.kg)} unit="kg" />
+          <SummaryTile label="Actual" value={fmtKg(summary.last.kg)} unit="kg" hint={formatShort(summary.last.date)} />
           <SummaryTile label="Cambio" value={fmtChange(summary.change)} unit="kg" className={changeCls(summary.change)}
             hint={`desde ${formatShort(summary.first.date)}`} />
           <SummaryTile label="Mín · Máx" value={`${fmtKg(summary.min)}·${fmtKg(summary.max)}`} small />
@@ -155,7 +155,10 @@ export function BodyWeightProgress({ bodyWeights }) {
       <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-3">
         <div className="text-[10px] text-zinc-500 uppercase tracking-wider font-bold mb-2">Evolución</div>
         {data.length < 2 ? (
-          <div className="text-xs text-zinc-500 text-center py-10">Necesitas al menos dos registros en este periodo para ver la gráfica.</div>
+          <div className="text-xs text-zinc-500 text-center py-10">
+            {data.length ? 'Necesitas al menos dos registros en este periodo para ver la gráfica.'
+              : `Sin registros en este periodo. El último es del ${formatShort(bodyWeights[0].date)}.`}
+          </div>
         ) : (
           <ResponsiveContainer width="100%" height={200}>
             <LineChart data={data} margin={{ top: 8, right: 8, bottom: 0, left: -12 }}>

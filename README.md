@@ -12,6 +12,12 @@ App personal para registrar entrenamientos: rutinas, series con RIR, autorrellen
 
 Consulta [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) para las dependencias entre capas y el flujo de datos. `dist/` y `node_modules/` son archivos generados y no se versionan.
 
+## Cambios de la versión 1.11.1
+
+- Si un descanso nuevo no consigue mostrar su notificación, el aviso en segundo plano del descanso anterior ya no salta a destiempo.
+- Al dejar vacío el campo «⋯» de un descanso se conserva el tiempo que había, en vez de quitar el descanso. Un descanso de 0 se muestra como «Sin descanso».
+- La gráfica de peso cuenta los periodos hasta hoy y la tarjeta «Actual» indica la fecha del último registro. Los registros con fecha no válida se descartan al importar una copia.
+
 ## Cambios de la versión 1.11.0
 
 - Las superseries tienen dos descansos independientes: entre ejercicios (al terminar una serie y pasar al siguiente de la superserie) y entre rondas (al completar la ronda). Por defecto no hay pausa entre ejercicios, como hasta ahora.

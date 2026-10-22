@@ -45,9 +45,13 @@ assert.equal((await showRestNotification(timer)).status, 'permission');
 Notification.permission = 'granted';
 const originalShow = worker.showNotification;
 worker.showNotification = async () => { throw new Error('OS notification failure'); };
-assert.equal((await showRestNotification(timer)).status, 'failed', 'permission alone is not delivery');
+const replacement = { ...timer, endsAt: timer.endsAt + 30000 };
+assert.equal((await showRestNotification(replacement)).status, 'failed', 'permission alone is not delivery');
+assert.deepEqual(messages.at(-1), { type: 'rest-schedule', endsAt: replacement.endsAt, exerciseName: 'Press de banca' },
+  'a failed display still replaces the previous deadline');
 worker.showNotification = originalShow;
 assert.equal((await showRestNotification({ ...timer, endsAt: Date.now() - 1 })).status, 'expired');
+assert.deepEqual(messages.at(-1), { type: 'rest-cancel' }, 'an expired rest clears any pending deadline');
 const originalSetTimeout = globalThis.setTimeout;
 globalThis.setTimeout = callback => originalSetTimeout(callback, 1);
 navigator.serviceWorker.ready = new Promise(() => {});

@@ -2,7 +2,7 @@
 // device goes in here; anything new that gets persisted must be added to
 // BACKUP_FIELDS, buildBackup and mergeBackup (test-backup.mjs checks it).
 import { mergeCustomExercises } from '../exercises/custom-exercises.js';
-import { upgradePlateConfig } from '../exercises/exercise-utils.js';
+import { isValidBodyWeight, upgradePlateConfig } from '../exercises/exercise-utils.js';
 import { dateKey } from '../../presentation/shared/formatters.js';
 
 export const BACKUP_VERSION = 4;
@@ -52,7 +52,7 @@ export function mergeBackup(current, data) {
   // Body weights: one entry per calendar day, the backup's wins. Newest first.
   const bwByDay = new Map();
   [...(current.bodyWeights || []), ...(Array.isArray(data.bodyWeights) ? data.bodyWeights : [])].forEach(b => {
-    if (!b || !b.date || !Number.isFinite(Number(b.kg))) return;
+    if (!isValidBodyWeight(b)) return;
     bwByDay.set(dateKey(b.date), { date: b.date, kg: Number(b.kg) });
   });
   const bodyWeights = [...bwByDay.values()].sort((a, b) => new Date(b.date) - new Date(a.date));

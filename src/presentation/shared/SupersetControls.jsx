@@ -3,6 +3,14 @@ import { Link2, Unlink } from 'lucide-react';
 import { supersetInfo } from '../../domain/training/supersets.js';
 import { fmtDur } from './formatters.js';
 
+const restSummary = ({ transitionSeconds, restSeconds }) => {
+  const between = transitionSeconds > 0 ? `${fmtDur(transitionSeconds)} entre ejercicios` : '';
+  const round = restSeconds > 0 ? `${fmtDur(restSeconds)} al completar la ronda` : '';
+  if (between && round) return `Descansa ${between} y ${round}.`;
+  if (between) return `Descansa ${between}; sin descanso entre rondas.`;
+  return round ? `Descansa ${round}.` : 'Sin descansos programados.';
+};
+
 export function SupersetBadge({ entries, index }) {
   const group = supersetInfo(entries, index);
   if (!group) return null;
@@ -17,9 +25,7 @@ export function SupersetControls({ entries, index, exMap, onJoin, onSplit, next 
   return <div className="px-3 pt-3 text-xs">
     <SupersetBadge entries={entries} index={index} />
     {group && index === group.start && <p className="text-zinc-400 mb-2">
-      Alterna una serie de cada ejercicio. {group.transitionSeconds > 0
-        ? `Descansa ${fmtDur(group.transitionSeconds)} entre ejercicios y ${fmtDur(group.restSeconds)} al completar la ronda.`
-        : 'Descansa al completar la ronda.'}
+      Alterna una serie de cada ejercicio. {restSummary(group)}
       {next && <span className="block text-lime-300 mt-1" role="status">
         Siguiente: {exMap[entries[next.entryIndex].exerciseId]?.name} · serie {next.setIndex + 1}
       </span>}
