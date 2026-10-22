@@ -1,19 +1,18 @@
 import { SessionCard } from '../../shared/SessionCard.jsx';
 import React from 'react';
-import { useEffect, useMemo, useRef, useState } from 'react';
-import { useBackLayer } from '../../shared/BrowserNavigation.jsx';
-import { Activity, Award, Clock, Dumbbell, Flame, Play, Plus, Trash2, X } from 'lucide-react';
+import { useMemo } from 'react';
+import { Activity, Award, ChevronRight, Clock, Dumbbell, Flame, Play, Plus } from 'lucide-react';
 import { bodyWeightDelta } from '../../../domain/exercises/exercise-utils.js';
 import { Area, AreaChart, ResponsiveContainer, YAxis } from 'recharts';
-import { hasCompletedSet, sessionVolume } from '../../../domain/training/session-utils.js';
-import { dateKey, fmtDur, formatLong, formatShort, sessionDuration } from '../../shared/formatters.js';
+import { hasCompletedSet } from '../../../domain/training/session-utils.js';
+import { dateKey, formatShort, sessionDuration } from '../../shared/formatters.js';
 import { buildLabel } from '../../../app/build-info.js';
-import { MUSCLE_GROUPS, availableRoutineEntries } from '../../../domain/exercises/catalog.js';
+import { availableRoutineEntries } from '../../../domain/exercises/catalog.js';
 import { goalMessage, weeklyGoalProgress } from '../../../domain/training/motivation.js';
 import { WeeklyGoalCard } from '../motivation/MotivationUI.jsx';
+import { TrainingCalendar } from '../calendar/TrainingCalendar.jsx';
 
-export function HomeView({ sessions, exMap, routines, currentSession, bodyWeights = [], onSaveBodyWeight, onDeleteBodyWeight, showConfirm, onStart, onStartRoutine, onResume, onOpenSession, onGoRoutines, weeklyGoal, onChangeGoal }) {
-  const [bwModalOpen, setBwModalOpen] = useState(false);
+export function HomeView({ sessions, exMap, routines, currentSession, bodyWeights = [], onOpenBodyWeight, onStart, onStartRoutine, onResume, onOpenSession, onGoRoutines, weeklyGoal, onChangeGoal }) {
   const goalProgress = useMemo(() => weeklyGoalProgress(sessions, weeklyGoal), [sessions, weeklyGoal]);
   const stats = useMemo(() => {
     const weekKeys = new Set(weeklyGoalProgress([], 1).weekDays.map(day => day.key));
@@ -67,12 +66,6 @@ export function HomeView({ sessions, exMap, routines, currentSession, bodyWeight
         )}
       </div>
 
-      {goalProgress && (
-        <div className="px-5 mt-4">
-          <WeeklyGoalCard progress={goalProgress} message={goalMessage(goalProgress.weekStart)} onChange={onChangeGoal} />
-        </div>
-      )}
-
       {!currentSession && routines.length > 0 && (
         <div className="px-5 mt-4">
           <div className="flex items-center justify-between mb-2">
@@ -100,6 +93,12 @@ export function HomeView({ sessions, exMap, routines, currentSession, bodyWeight
         </div>
       )}
 
+      {goalProgress && (
+        <div className="px-5 mt-4">
+          <WeeklyGoalCard progress={goalProgress} message={goalMessage(goalProgress.weekStart)} onChange={onChangeGoal} />
+        </div>
+      )}
+
       <div className="px-5 mt-5">
         <div className="grid grid-cols-2 gap-3">
           <StatCard icon={Flame} label="Esta semana" value={stats.weekCount} suffix={stats.weekCount === 1 ? 'sesión' : 'sesiones'} accent />
@@ -110,7 +109,12 @@ export function HomeView({ sessions, exMap, routines, currentSession, bodyWeight
       </div>
 
       <div className="px-5 mt-4">
-        <BodyWeightCard bodyWeights={bodyWeights} onOpen={() => setBwModalOpen(true)} />
+        <BodyWeightCard bodyWeights={bodyWeights} onOpen={onOpenBodyWeight} />
+      </div>
+
+      <div className="px-5 mt-7">
+        <h2 className="font-display text-xl text-zinc-300 mb-3">CALENDARIO</h2>
+        <TrainingCalendar sessions={sessions} exMap={exMap} onOpenSession={onOpenSession} />
       </div>
 
       <div className="px-5 mt-7">
@@ -123,22 +127,12 @@ export function HomeView({ sessions, exMap, routines, currentSession, bodyWeight
           </div>
         ) : (
           <div className="space-y-2">
-            {sessions.slice(0, 8).map(s => (
+            {sessions.slice(0, 5).map(s => (
               <SessionCard key={s.id} session={s} exMap={exMap} onClick={() => onOpenSession(s)} />
             ))}
           </div>
         )}
       </div>
-
-      {bwModalOpen && (
-        <BodyWeightModal
-          bodyWeights={bodyWeights}
-          onSave={onSaveBodyWeight}
-          onDelete={onDeleteBodyWeight}
-          showConfirm={showConfirm}
-          onClose={() => setBwModalOpen(false)}
-        />
-      )}
     </div>
   );
 }
@@ -180,6 +174,7 @@ export function BodyWeightCard({ bodyWeights, onOpen }) {
     <button
       onClick={onOpen}
       className="w-full bg-zinc-900 border border-zinc-800 hover:border-lime-300/40 rounded-2xl p-4 text-left transition flex items-center gap-3"
+      aria-label="Peso corporal: registrar y ver evolución"
     >
       <div className="flex-1 min-w-0">
         <div className="text-[10px] text-zinc-500 uppercase tracking-wider font-semibold mb-0.5">Peso corporal</div>
@@ -198,7 +193,7 @@ export function BodyWeightCard({ bodyWeights, onOpen }) {
         ) : (
           <>
             <div className="font-display text-xl text-zinc-300">REGISTRA TU PESO</div>
-            <div className="text-[11px] text-zinc-500">Toca para añadir el primero</div>
+            <div className="text-[11px] text-zinc-500">Toca para añadir el primero y ver tu evolución</div>
           </>
         )}
       </div>
@@ -212,134 +207,10 @@ export function BodyWeightCard({ bodyWeights, onOpen }) {
           </ResponsiveContainer>
         </div>
       )}
-      <div className="bg-zinc-800 text-lime-300 rounded-full w-9 h-9 flex items-center justify-center shrink-0">
-        <Plus className="w-5 h-5" strokeWidth={2.5} />
-      </div>
+      <ChevronRight className="w-5 h-5 text-zinc-500 shrink-0" />
     </button>
   );
 }
-
-export function BodyWeightModal({ bodyWeights, onSave, onDelete, showConfirm, onClose }) {
-  useBackLayer(true, onClose);
-  // Default the input to last value (so user just adjusts), or empty if first.
-  const last = bodyWeights[0];
-  const [value, setValue] = useState(last ? String(last.kg) : '');
-  const [error, setError] = useState('');
-  const inputRef = useRef(null);
-
-  useEffect(() => {
-    // Focus the input on mount so mobile users can type immediately.
-    setTimeout(() => inputRef.current?.focus(), 50);
-  }, []);
-
-  const todayKey = dateKey(new Date());
-  const todaysEntry = bodyWeights.find(b => dateKey(b.date) === todayKey);
-
-  const save = () => {
-    const n = parseFloat(value.replace(',', '.'));
-    if (!Number.isFinite(n) || n <= 0 || n > 500) {
-      setError('Introduce un peso válido (entre 1 y 500 kg)');
-      return;
-    }
-    onSave(n);
-    onClose();
-  };
-
-  const removeEntry = (entry) => {
-    showConfirm?.({
-      title: 'Eliminar registro',
-      body: `Se eliminará el registro de ${formatShort(entry.date)}: ${entry.kg} kg.`,
-      confirmLabel: 'Eliminar',
-      danger: true,
-      onConfirm: () => onDelete(entry.date),
-    });
-  };
-
-  return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center p-5 bg-zinc-950/70 backdrop-blur-sm anim-fade" onClick={onClose}>
-      <div
-        className="bg-zinc-900 border border-zinc-800 rounded-2xl max-w-sm w-full p-5 shadow-2xl anim-slide-up max-h-[80vh] flex flex-col"
-        onClick={e => e.stopPropagation()}
-      >
-        <div className="flex items-center justify-between mb-3">
-          <h3 className="font-display text-2xl text-zinc-100 leading-tight">PESO CORPORAL</h3>
-          <button onClick={onClose} className="text-zinc-500 hover:text-zinc-200 p-1" aria-label="Cerrar">
-            <X className="w-5 h-5" />
-          </button>
-        </div>
-
-        <div className="mb-4">
-          <label className="text-[10px] text-zinc-500 uppercase tracking-wider font-bold">
-            {todaysEntry ? 'Actualizar hoy' : 'Registrar hoy'} ({new Date().toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })})
-          </label>
-          {/* Input + "kg" suffix in a relative wrapper, then a full-width save
-              button below. Stacking vertically guarantees the save button
-              stays visible and tappable on narrow phone screens. */}
-          <div className="relative mt-1">
-            <input
-              ref={inputRef}
-              type="number"
-              step="0.1"
-              inputMode="decimal"
-              value={value}
-              onChange={e => { setValue(e.target.value); setError(''); }}
-              onKeyDown={e => { if (e.key === 'Enter') save(); }}
-              placeholder={last ? String(last.kg) : '—'}
-              className="w-full bg-zinc-800 border border-zinc-700 rounded-lg pl-3 pr-12 py-3 text-3xl font-display text-center outline-none focus:border-lime-300/60 placeholder:text-zinc-600"
-            />
-            <span className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-400 text-sm font-bold pointer-events-none">kg</span>
-          </div>
-          <button
-            onClick={save}
-            className="w-full bg-lime-300 hover:bg-lime-400 text-zinc-950 mt-2 py-3 rounded-full font-bold text-sm transition"
-          >
-            GUARDAR
-          </button>
-          {error && <div className="text-xs text-red-400 mt-1">{error}</div>}
-          {todaysEntry && !error && (
-            <div className="text-[10px] text-zinc-500 italic mt-1">
-              Ya hay un registro hoy ({todaysEntry.kg} kg). Guardar lo sobreescribe.
-            </div>
-          )}
-        </div>
-
-        <div className="flex-1 overflow-y-auto -mx-1 px-1">
-          <div className="text-[10px] text-zinc-500 uppercase tracking-wider font-bold mb-2">Historial</div>
-          {bodyWeights.length === 0 ? (
-            <div className="text-xs text-zinc-500 italic text-center py-6">Sin registros aún.</div>
-          ) : (
-            <div className="space-y-1">
-              {bodyWeights.slice(0, 30).map((b) => (
-                <div key={b.date} className="flex items-center justify-between bg-zinc-800/60 rounded-lg px-3 py-2">
-                  <div className="font-mono text-sm">
-                    <span className="text-zinc-100 font-semibold">{b.kg}</span>
-                    <span className="text-zinc-500 text-xs ml-1">kg</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs text-zinc-400">{formatShort(b.date)}</span>
-                    <button
-                      onClick={() => removeEntry(b)}
-                      className="text-zinc-500 hover:text-red-400 p-1"
-                      aria-label="Eliminar"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
-                </div>
-              ))}
-              {bodyWeights.length > 30 && (
-                <div className="text-[10px] text-zinc-600 italic text-center pt-1">
-                  Mostrando los 30 más recientes de {bodyWeights.length}.
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-      </div>
-    </div>
-  );
-}
-
 
 export function computeStreak(sessions) {
   if (!sessions.length) return 0;

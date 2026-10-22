@@ -9,9 +9,10 @@ import { fmtDur, formatShort, sessionDuration } from '../../shared/formatters.js
 import { ChartCard } from '../../shared/ChartCard.jsx';
 import { Select } from '../../shared/Select.jsx';
 import { MUSCLE_GROUPS } from '../../../domain/exercises/catalog.js';
+import { BodyWeightProgress } from '../body-weight/BodyWeightViews.jsx';
 
-export function ProgressView({ sessions, exercises, exMap }) {
-  const [subTab, setSubTab] = useState('metrics'); // 'metrics' | 'volume'
+export function ProgressView({ sessions, exercises, exMap, bodyWeights = [], onOpenBodyWeight }) {
+  const [subTab, setSubTab] = useState('metrics'); // 'metrics' | 'volume' | 'weight'
   const [selectedExId, setSelectedExId] = useState('');
   const [range, setRange] = useState('all');
 
@@ -102,22 +103,27 @@ export function ProgressView({ sessions, exercises, exMap }) {
         {/* Sub-tab switcher: metrics (everything that was here before) vs
             volume (the new body-map view) */}
         <div className="flex gap-2 mb-4">
-          <button
-            onClick={() => setSubTab('metrics')}
-            className={`flex-1 px-3 py-2 rounded-full text-xs font-bold transition ${subTab === 'metrics' ? 'bg-lime-300 text-zinc-950' : 'bg-zinc-900 text-zinc-400 border border-zinc-800'}`}
-          >
-            MÉTRICAS
-          </button>
-          <button
-            onClick={() => setSubTab('volume')}
-            className={`flex-1 px-3 py-2 rounded-full text-xs font-bold transition ${subTab === 'volume' ? 'bg-lime-300 text-zinc-950' : 'bg-zinc-900 text-zinc-400 border border-zinc-800'}`}
-          >
-            VOLUMEN
-          </button>
+          {[['metrics', 'MÉTRICAS'], ['volume', 'VOLUMEN'], ['weight', 'PESO']].map(([id, label]) => (
+            <button
+              key={id}
+              onClick={() => setSubTab(id)}
+              className={`flex-1 px-3 py-2 rounded-full text-xs font-bold transition ${subTab === id ? 'bg-lime-300 text-zinc-950' : 'bg-zinc-900 text-zinc-400 border border-zinc-800'}`}
+            >
+              {label}
+            </button>
+          ))}
         </div>
 
         {subTab === 'volume' ? (
           <VolumePanel sessions={sessions} exMap={exMap} />
+        ) : subTab === 'weight' ? (
+          <>
+            <BodyWeightProgress bodyWeights={bodyWeights} />
+            <button onClick={onOpenBodyWeight}
+              className="w-full mt-3 bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 rounded-full py-2.5 text-xs font-bold text-lime-300 transition">
+              REGISTRAR PESO Y VER HISTORIAL →
+            </button>
+          </>
         ) : (
         <>
         <div className="flex gap-2 overflow-x-auto scrollbar-hide -mx-1 px-1 mb-4">

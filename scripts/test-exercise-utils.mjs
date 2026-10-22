@@ -12,7 +12,10 @@ import {
   computePlates,
   platesSummary,
   bodyWeightDelta,
+  bodyWeightSeries,
+  bodyWeightSummary,
   DEFAULT_PLATE_CONFIG,
+  upgradePlateConfig,
 } from '../src/domain/exercises/exercise-utils.js';
 
 let pass = 0, fail = 0;
@@ -165,15 +168,20 @@ console.log('\ncomputePlates (with default config)');
   // 60 = bar 20 + 20 each side = 1 plate of 20kg per side
   let r = computePlates(60, cfg);
   ok('60kg → 20 per side, exact', r.exact && eq(r.perSide, [20]) && !r.belowBar);
-  // 80 = bar 20 + 30 each side. Greedy: 25 (1 pair available) + 5 = 30 ✓
+  ok('default has no 25s', !cfg.plates.some(p => p.weight === 25));
+  ok('default has 10 pairs of each plate', cfg.plates.every(p => p.pairs === 10));
+  // 80 = bar 20 + 30 each side → 20 + 10
   r = computePlates(80, cfg);
-  ok('80kg → 25+5 per side, exact (greedy uses largest plate first)', r.exact && eq(r.perSide, [25, 5]), r);
-  // 100 = bar 20 + 40 each side. Greedy: 25 + 15 = 40 ✓
+  ok('80kg → 20+10 per side, exact', r.exact && eq(r.perSide, [20, 10]), r);
+  // 100 = bar 20 + 40 each side → 20 + 20
   r = computePlates(100, cfg);
-  ok('100kg → 25+15 per side, exact', r.exact && eq(r.perSide, [25, 15]), r);
-  // 102.5 = bar 20 + 41.25 each side. Greedy: 25 + 15 + 1.25 = 41.25 ✓
+  ok('100kg → 20+20 per side, exact', r.exact && eq(r.perSide, [20, 20]), r);
+  // 102.5 = bar 20 + 41.25 each side → 20 + 20 + 1.25
   r = computePlates(102.5, cfg);
-  ok('102.5kg → 25+15+1.25 per side, exact', r.exact && eq(r.perSide, [25, 15, 1.25]), r);
+  ok('102.5kg → 20+20+1.25 per side, exact', r.exact && eq(r.perSide, [20, 20, 1.25]), r);
+  // 260 = bar 20 + 120 each side → six 20s, plenty of stock
+  r = computePlates(260, cfg);
+  ok('260kg → 6×20 per side, exact', r.exact && eq(r.perSide, [20, 20, 20, 20, 20, 20]), r);
   // 22.5 = bar + 1.25 each side
   r = computePlates(22.5, cfg);
   ok('22.5kg → 1.25 per side, exact', r.exact && eq(r.perSide, [1.25]));
@@ -504,6 +512,38 @@ console.log('\nintegration: plate breakdown sanity over 5..300 kg');
   ok('swap keeps set count and targets', swapped.sets.length === 2 && swapped.sets[0].repsMin === 6);
   ok('swap prefills from new exercise history', swapped.sets[0].weight === 100 && swapped.sets[1].weight === '');
   ok('swap clears done and notes', swapped.sets.every(set => !set.done) && swapped.notes === '');
+}
+
+console.log('\nupgradePlateConfig');
+{
+  const legacy = { barWeightKg: 20, plates: [[25, 1], [20, 3], [15, 1], [10, 2], [5, 2], [2.5, 2], [1.25, 1]]
+    .map(([weight, pairs]) => ({ weight, pairs, enabled: true })) };
+  ok('untouched legacy defaults → new defaults', eq(upgradePlateConfig(legacy).plates, DEFAULT_PLATE_CONFIG.plates));
+  ok('legacy bar weight kept', upgradePlateConfig({ ...legacy, barWeightKg: 15 }).barWeightKg === 15);
+  const custom = { barWeightKg: 20, plates: legacy.plates.map((p, i) => i === 0 ? { ...p, pairs: 2 } : p) };
+  ok('customised config kept as is', eq(upgradePlateConfig(custom).plates, custom.plates));
+  const disabled = { barWeightKg: 20, plates: legacy.plates.map((p, i) => i === 0 ? { ...p, enabled: false } : p) };
+  ok('legacy with 25 disabled counts as customised', eq(upgradePlateConfig(disabled).plates, disabled.plates));
+  ok('missing plates → defaults', eq(upgradePlateConfig({ barWeightKg: 20 }).plates, DEFAULT_PLATE_CONFIG.plates));
+  ok('invalid bar → default bar', upgradePlateConfig({ barWeightKg: 'x', plates: custom.plates }).barWeightKg === 20);
+}
+
+console.log('\nbodyWeightSeries / bodyWeightSummary');
+{
+  const bw = [
+    { date: '2026-10-20T08:00:00Z', kg: 80.2 },
+    { date: '2026-10-01T08:00:00Z', kg: 81 },
+    { date: '2026-08-01T08:00:00Z', kg: 83.5 },
+    { date: 'bad', kg: 'x' },
+  ];
+  const all = bodyWeightSeries(bw);
+  ok('series is oldest first and drops invalid', eq(all.map(b => b.kg), [83.5, 81, 80.2]));
+  ok('30-day window anchored to latest entry', eq(bodyWeightSeries(bw, 30).map(b => b.kg), [81, 80.2]));
+  ok('empty input → []', eq(bodyWeightSeries([]), []) && eq(bodyWeightSeries(null), []));
+  const sum = bodyWeightSummary(all);
+  ok('summary change last - first', approx(sum.change, -3.3) && sum.first.kg === 83.5 && sum.last.kg === 80.2);
+  ok('summary min/max/count', sum.min === 80.2 && sum.max === 83.5 && sum.count === 3);
+  ok('summary of nothing is null', bodyWeightSummary([]) === null);
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);

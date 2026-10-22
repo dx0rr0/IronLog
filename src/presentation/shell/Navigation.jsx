@@ -1,6 +1,6 @@
 import React from 'react';
 import { useBackLayer } from '../shared/BrowserNavigation.jsx';
-import { AlertTriangle, Calendar as CalendarIcon, ClipboardList, Dumbbell, Home, Play, Settings, TrendingUp } from 'lucide-react';
+import { AlertTriangle, ClipboardList, Dumbbell, Home, Play, Settings, TrendingUp } from 'lucide-react';
 
 export function ConfirmDialog({ title, body, confirmLabel = 'Aceptar', cancelLabel = 'Cancelar', danger, hideCancel, onConfirm, onClose }) {
   useBackLayer(true, onClose);
@@ -59,7 +59,6 @@ export function BottomNav({ tab, setTab, hasActive, onResumeActive }) {
   const items = [
     { id: 'home', icon: Home, label: 'Inicio' },
     { id: 'routines', icon: ClipboardList, label: 'Rutinas' },
-    { id: 'calendar', icon: CalendarIcon, label: 'Calend.' },
     { id: 'exercises', icon: Dumbbell, label: 'Ejerc.' },
     { id: 'progress', icon: TrendingUp, label: 'Progreso' },
     { id: 'settings', icon: Settings, label: 'Ajustes' },
@@ -75,7 +74,7 @@ export function BottomNav({ tab, setTab, hasActive, onResumeActive }) {
         </button>
       )}
       <nav className="fixed bottom-0 left-0 right-0 bg-zinc-950/95 backdrop-blur-md border-t border-zinc-800 z-30">
-        <div className="max-w-md mx-auto grid grid-cols-6">
+        <div className="max-w-md mx-auto grid grid-cols-5">
           {items.map(it => {
             const Icon = it.icon;
             const active = tab === it.id;

@@ -85,16 +85,26 @@ export const DEFAULT_PLATE_CONFIG = {
   barWeightKg: 20,
   // pairs = number of *pairs* available. 1 pair = 2 physical plates (one
   // per side of the bar) — the smallest useful unit for symmetric loading.
-  plates: [
-    { weight: 25,   pairs: 1, enabled: true },
-    { weight: 20,   pairs: 3, enabled: true },
-    { weight: 15,   pairs: 1, enabled: true },
-    { weight: 10,   pairs: 2, enabled: true },
-    { weight: 5,    pairs: 2, enabled: true },
-    { weight: 2.5,  pairs: 2, enabled: true },
-    { weight: 1.25, pairs: 1, enabled: true },
-  ],
+  // A typical gym has no 25s and plenty of everything else: 10 pairs is
+  // effectively unlimited for any lift.
+  plates: [20, 15, 10, 5, 2.5, 1.25].map(weight => ({ weight, pairs: 10, enabled: true })),
 };
+
+// Defaults shipped before 1.10 (one pair of 25s, scarce everything else).
+const LEGACY_DEFAULT_PLATES = [[25, 1], [20, 3], [15, 1], [10, 2], [5, 2], [2.5, 2], [1.25, 1]];
+
+// Normalizes a stored plate config. A config still identical to the old
+// defaults was never customised, so it moves to the current defaults.
+export function upgradePlateConfig(config) {
+  if (!config || typeof config !== 'object') return DEFAULT_PLATE_CONFIG;
+  const plates = Array.isArray(config.plates) && config.plates.length ? config.plates : DEFAULT_PLATE_CONFIG.plates;
+  const untouched = plates.length === LEGACY_DEFAULT_PLATES.length && plates.every((p, i) =>
+    p.weight === LEGACY_DEFAULT_PLATES[i][0] && p.pairs === LEGACY_DEFAULT_PLATES[i][1] && p.enabled !== false);
+  return {
+    barWeightKg: Number.isFinite(config.barWeightKg) ? config.barWeightKg : DEFAULT_PLATE_CONFIG.barWeightKg,
+    plates: untouched ? DEFAULT_PLATE_CONFIG.plates : plates,
+  };
+}
 
 // Greedy plate fit. Returns:
 //   - perSide: array of plate weights to put on each side, descending order
@@ -173,4 +183,34 @@ export function bodyWeightDelta(bodyWeights, days) {
   }
   if (!baseline) return null;
   return Number((current.kg - baseline.kg).toFixed(2));
+}
+
+// Body-weight entries within the last `days` days (null = all), oldest
+// first, ready to chart. The window is anchored to the latest entry so an
+// old log still shows something.
+export function bodyWeightSeries(bodyWeights, days = null) {
+  if (!Array.isArray(bodyWeights) || !bodyWeights.length) return [];
+  const sorted = bodyWeights
+    .filter(b => b && b.date && Number.isFinite(Number(b.kg)))
+    .map(b => ({ date: b.date, kg: Number(b.kg) }))
+    .sort((a, b) => new Date(a.date) - new Date(b.date));
+  if (!days || !sorted.length) return sorted;
+  const cutoff = new Date(sorted[sorted.length - 1].date).getTime() - days * 24 * 3600 * 1000;
+  return sorted.filter(b => new Date(b.date).getTime() >= cutoff);
+}
+
+// Start, current, change and range of a series from bodyWeightSeries.
+export function bodyWeightSummary(series) {
+  if (!series?.length) return null;
+  const kgs = series.map(b => b.kg);
+  const first = series[0];
+  const last = series[series.length - 1];
+  return {
+    first,
+    last,
+    change: Number((last.kg - first.kg).toFixed(2)),
+    min: Math.min(...kgs),
+    max: Math.max(...kgs),
+    count: series.length,
+  };
 }

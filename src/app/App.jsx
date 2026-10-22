@@ -1,8 +1,9 @@
 import { DEFAULT_REST_SECONDS } from '../domain/training/training-defaults.js';
 import React from 'react';
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { DEFAULT_PLATE_CONFIG, findLastEntryForExercise, inheritSet } from '../domain/exercises/exercise-utils.js';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { DEFAULT_PLATE_CONFIG, findLastEntryForExercise, inheritSet, upgradePlateConfig } from '../domain/exercises/exercise-utils.js';
 import { storage } from '../infrastructure/storage/storage.js';
+import { buildBackup, describeBackup, mergeBackup, parseBackup } from '../domain/backup/backup.js';
 import { mergeCustomExercises } from '../domain/exercises/custom-exercises.js';
 import { dismissBackupReminder, markBackupDone, requestPersistentStorage, shouldRemindBackup } from '../infrastructure/storage/persistence.js';
 import { repeatSession } from '../domain/training/workout-intelligence.js';
@@ -17,7 +18,7 @@ import { SessionDetail, SessionSummary, WorkoutSession, defaultSet } from '../pr
 import { ExerciseDetail, ExercisesView, NewExerciseForm } from '../presentation/features/exercises/ExerciseViews.jsx';
 import { RoutineEditor, RoutinesView } from '../presentation/features/routines/RoutineViews.jsx';
 import { HomeView } from '../presentation/features/home/HomeView.jsx';
-import { CalendarView } from '../presentation/features/calendar/CalendarView.jsx';
+import { BodyWeightView } from '../presentation/features/body-weight/BodyWeightViews.jsx';
 import { ProgressView } from '../presentation/features/progress/ProgressView.jsx';
 import { SettingsView } from '../presentation/features/settings/SettingsView.jsx';
 import { BottomNav, ConfirmDialog } from '../presentation/shell/Navigation.jsx';
@@ -26,7 +27,24 @@ import { WeeklyGoalSetup } from '../presentation/features/motivation/MotivationU
 import { BrowserNavigationContext, useBrowserNavigation } from '../presentation/shared/BrowserNavigation.jsx';
 
 export default function App() {
-  const { tab, setTab, view, setView, navigation } = useBrowserNavigation();
+  const { tab: rawTab, setTab, view, setView, navigation } = useBrowserNavigation();
+  // The calendar tab moved into Inicio (1.10); old history entries may still point at it.
+  const tab = rawTab === 'calendar' ? 'home' : rawTab;
+
+  // Pages open at the top; going back to a tab returns to where you were.
+  const screenKey = view ? `view:${view.kind}` : `tab:${tab}`;
+  const scrollMemory = useRef({});
+  useEffect(() => {
+    const remember = () => { scrollMemory.current[screenKey] = window.scrollY; };
+    window.addEventListener('scroll', remember, { passive: true });
+    return () => window.removeEventListener('scroll', remember);
+  }, [screenKey]);
+  useLayoutEffect(() => {
+    const target = view ? 0 : scrollMemory.current[screenKey] || 0;
+    if (window.scrollY !== target) window.scrollTo(0, target);
+  // Only a change of screen should move the page.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [screenKey]);
   const [loading, setLoading] = useState(true);
   const [hydrated, setHydrated] = useState(false);
   const [loadError, setLoadError] = useState(false);
@@ -38,7 +56,6 @@ export default function App() {
   const [currentSession, setCurrentSession] = useState(null);
   const [editingSession, setEditingSession] = useState(null); // working copy of a finished session being edited
   const [routines, setRoutines] = useState([]);
-  const [selectedDate, setSelectedDate] = useState(null);
   const [bodyWeights, setBodyWeights] = useState([]); // [{date: ISO, kg: number}], newest first
   const [plateConfig, setPlateConfig] = useState(DEFAULT_PLATE_CONFIG);
   const [weeklyGoal, setWeeklyGoal] = useState(null);
@@ -71,14 +88,7 @@ export default function App() {
         if (rt) setRoutines(rt);
         if (Array.isArray(bw)) setBodyWeights(bw);
         if (Number.isInteger(wg) && wg >= 1 && wg <= 7) setWeeklyGoal(wg);
-        if (pc && typeof pc === 'object') {
-          // Merge with defaults so new fields added in future versions are
-          // present even if the stored config is from an older version.
-          setPlateConfig({
-            barWeightKg: Number.isFinite(pc.barWeightKg) ? pc.barWeightKg : DEFAULT_PLATE_CONFIG.barWeightKg,
-            plates: Array.isArray(pc.plates) && pc.plates.length ? pc.plates : DEFAULT_PLATE_CONFIG.plates,
-          });
-        }
+        if (pc && typeof pc === 'object') setPlateConfig(upgradePlateConfig(pc));
         setHydrated(true);
         setLoading(false);
         setLoadError(false);
@@ -350,17 +360,10 @@ export default function App() {
 
   // ---------- import / export ----------
   const exportData = async () => {
-    const data = {
-      version: 4,
-      exportedAt: new Date().toISOString(),
+    const data = buildBackup({
       customExercises: mergeCustomExercises(customExercises, await storage.get('custom-exercises')),
-      sessions,
-      currentSession,
-      routines,
-      bodyWeights,
-      plateConfig,
-      weeklyGoal,
-    };
+      sessions, currentSession, routines, bodyWeights, plateConfig, weeklyGoal,
+    });
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -377,54 +380,21 @@ export default function App() {
     const reader = new FileReader();
     reader.onload = e => {
       try {
-        const data = JSON.parse(e.target.result);
-        if (!data.sessions || !Array.isArray(data.sessions)) throw new Error('Formato inválido');
-        const importedBw = Array.isArray(data.bodyWeights) ? data.bodyWeights : [];
+        const data = parseBackup(e.target.result);
         showConfirm({
           title: 'Importar datos',
-          body: `Importar ${data.sessions.length} sesión(es), ${data.customExercises?.length || 0} ejercicio(s) propios, ${data.routines?.length || 0} rutina(s)${importedBw.length ? ` y ${importedBw.length} registro(s) de peso` : ''}${data.currentSession ? ' y una sesión en curso' : ''}. Se fusionarán con los datos actuales.`,
+          body: describeBackup(data),
           confirmLabel: 'Importar',
           onConfirm: () => {
-            const newCustom = mergeCustomExercises(customExercises, data.customExercises);
-            const newSessions = [...sessions];
-            data.sessions.forEach(s => {
-              if (!newSessions.find(n => n.id === s.id)) newSessions.push(s);
-            });
-            newSessions.sort((a, b) => new Date(b.date) - new Date(a.date));
-            const newRoutines = [...routines];
-            (data.routines || []).forEach(r => {
-              if (!newRoutines.find(n => n.id === r.id)) newRoutines.push(r);
-            });
-            // Body weights: dedupe by date (same calendar day = same entry,
-            // last wins). Then sort newest first.
-            const bwByDay = new Map();
-            [...bodyWeights, ...importedBw].forEach(b => {
-              if (!b || !b.date || !Number.isFinite(Number(b.kg))) return;
-              bwByDay.set(dateKey(b.date), { date: b.date, kg: Number(b.kg) });
-            });
-            const newBw = [...bwByDay.values()].sort((a, b) => new Date(b.date) - new Date(a.date));
-            setCustomExercises(newCustom);
-            setSessions(newSessions);
-            if (!currentSession && data.currentSession?.id &&
-                Array.isArray(data.currentSession.entries) &&
-                Number.isFinite(data.currentSession.startedAt) &&
-                !newSessions.some(s => s.id === data.currentSession.id)) {
-              setCurrentSession(data.currentSession);
-            }
-            setRoutines(newRoutines);
-            setBodyWeights(newBw);
-            // Plate config: only override if the export contains one.
-            // Otherwise keep the user's current config untouched.
-            if (data.plateConfig && typeof data.plateConfig === 'object') {
-              setPlateConfig({
-                barWeightKg: Number.isFinite(data.plateConfig.barWeightKg) ? data.plateConfig.barWeightKg : DEFAULT_PLATE_CONFIG.barWeightKg,
-                plates: Array.isArray(data.plateConfig.plates) && data.plateConfig.plates.length ? data.plateConfig.plates : DEFAULT_PLATE_CONFIG.plates,
-              });
-            }
-            if (Number.isInteger(data.weeklyGoal) && data.weeklyGoal >= 1 && data.weeklyGoal <= 7) {
-              setWeeklyGoal(data.weeklyGoal);
-              setGoalPromptDismissed(true);
-            }
+            const next = mergeBackup({ customExercises, sessions, currentSession, routines, bodyWeights, plateConfig, weeklyGoal }, data);
+            setCustomExercises(next.customExercises);
+            setSessions(next.sessions);
+            setCurrentSession(next.currentSession);
+            setRoutines(next.routines);
+            setBodyWeights(next.bodyWeights);
+            setPlateConfig(next.plateConfig);
+            setWeeklyGoal(next.weeklyGoal);
+            if (next.weeklyGoal) setGoalPromptDismissed(true);
             showToast('Datos importados ✓');
           },
         });
@@ -592,6 +562,14 @@ export default function App() {
               onClose={() => setView(null)}
               onDetail={() => setView({ kind: 'session', data: view.data })}
             />
+          ) : view?.kind === 'bodyWeight' ? (
+            <BodyWeightView
+              bodyWeights={bodyWeights}
+              onSave={kg => { saveBodyWeight(kg); showToast('Peso guardado ✓'); }}
+              onDelete={deleteBodyWeight}
+              showConfirm={showConfirm}
+              onBack={() => setView(null)}
+            />
           ) : view?.kind === 'exercise' ? (
             <ExerciseDetail exercise={view.data} sessions={sessions} onBack={() => setView(null)} />
           ) : view?.kind === 'newExercise' ? (
@@ -624,9 +602,7 @@ export default function App() {
                   routines={routines}
                   currentSession={currentSession}
                   bodyWeights={bodyWeights}
-                  onSaveBodyWeight={saveBodyWeight}
-                  onDeleteBodyWeight={deleteBodyWeight}
-                  showConfirm={showConfirm}
+                  onOpenBodyWeight={() => setView({ kind: 'bodyWeight' })}
                   onStart={() => startSession()}
                   onStartRoutine={(rid) => startSession(rid)}
                   onResume={() => setView({ kind: 'active' })}
@@ -648,15 +624,6 @@ export default function App() {
                   hasActive={!!currentSession}
                 />
               )}
-              {tab === 'calendar' && (
-                <CalendarView
-                  sessions={sessions}
-                  exMap={exMap}
-                  selectedDate={selectedDate}
-                  setSelectedDate={setSelectedDate}
-                  onOpenSession={s => setView({ kind: 'session', data: s })}
-                />
-              )}
               {tab === 'exercises' && (
                 <ExercisesView
                   exercises={availableExercises}
@@ -668,7 +635,8 @@ export default function App() {
                 />
               )}
               {tab === 'progress' && (
-                <ProgressView sessions={sessions} exercises={allExercises} exMap={exMap} />
+                <ProgressView sessions={sessions} exercises={allExercises} exMap={exMap}
+                  bodyWeights={bodyWeights} onOpenBodyWeight={() => setView({ kind: 'bodyWeight' })} />
               )}
               {tab === 'settings' && (
                 <SettingsView

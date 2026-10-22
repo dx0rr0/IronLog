@@ -12,6 +12,14 @@ App personal para registrar entrenamientos: rutinas, series con RIR, autorrellen
 
 Consulta [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) para las dependencias entre capas y el flujo de datos. `dist/` y `node_modules/` son archivos generados y no se versionan.
 
+## Cambios de la versión 1.10.0
+
+- El inicio reúne lo importante: empezar a entrenar, la meta semanal, la racha y un calendario del mes con los días entrenados. Tocar un día muestra sus entrenos. Desaparece la pestaña Calendario.
+- Nueva pantalla de peso corporal, desde la tarjeta del inicio o desde Progreso → Peso. Tiene una gráfica de evolución (1 mes, 3 meses, 6 meses, 1 año o todo), el cambio en el periodo, el mínimo y máximo, y el historial completo con la diferencia entre registros.
+- Los discos por defecto ya no incluyen discos de 25 kg y traen 10 pares de 20, 15, 10, 5, 2,5 y 1,25 kg. Si nunca cambiaste la configuración de discos, se actualiza sola; si la personalizaste, se respeta.
+- La copia de seguridad en JSON incluye sesiones, sesión en curso, rutinas, ejercicios propios, peso corporal, discos y meta semanal. Un test comprueba que todo lo que la app guarda va en la copia y que restaurarla en un dispositivo vacío lo recupera.
+- Cada pantalla se abre arriba del todo, y al volver atrás recuperas la posición en la que estabas.
+
 ## Cambios de la versión 1.9.0
 
 - Los ejercicios se reordenan manteniendo pulsada su cabecera y arrastrando. Las superseries se mueven como un bloque.
