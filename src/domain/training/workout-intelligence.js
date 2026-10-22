@@ -138,6 +138,7 @@ export function repeatSession(source, exMap, now = Date.now()) {
       exerciseId: entry.exerciseId,
       ...(entry.supersetId ? { supersetId: entry.supersetId } : {}),
       restSeconds: entry.restSeconds ?? DEFAULT_REST_SECONDS,
+      ...(entry.transitionSeconds > 0 ? { transitionSeconds: entry.transitionSeconds } : {}),
       notes: '',
       sets: (entry.sets || []).map(set => inheritSet(exMap[entry.exerciseId], set, null)),
     }))),

@@ -17,8 +17,9 @@ import { GoalCelebration, RecordCelebration } from '../motivation/MotivationUI.j
 import { adjustRestTimer, createRestTimer, restSecondsLeft } from '../../../domain/training/rest-timer.js';
 import { closeRestNotification, showRestNotification } from '../../../infrastructure/notifications/rest-notification.js';
 import { SupersetBadge, SupersetControls } from '../../shared/SupersetControls.jsx';
+import { RestChip, RestEditor } from '../../shared/RestSettings.jsx';
 import { useBackGuard, useBackLayer } from '../../shared/BrowserNavigation.jsx';
-import { joinSuperset, splitSuperset, moveTrainingEntry, moveTrainingBlock, normalizeSupersets, supersetInfo, trainingBlocks, updateTrainingEntry, restAfterSet, nextSupersetSet } from '../../../domain/training/supersets.js';
+import { joinSuperset, splitSuperset, moveTrainingEntry, moveTrainingBlock, normalizeSupersets, supersetInfo, trainingBlocks, updateTrainingEntry, restDetailAfterSet, nextSupersetSet } from '../../../domain/training/supersets.js';
 import { DragHandle, useDragReorder } from '../../shared/DragReorder.jsx';
 import { cancelRestChime, finishRestChime, scheduleRestChime, unlockAudio } from '../../../infrastructure/audio/rest-sound.js';
 
@@ -254,14 +255,17 @@ export function WorkoutSession({ mode, session, setSession, exercises, exMap, on
       const updated = session.entries.map((e, i) => i !== entryIdx ? e : {
         ...e, sets: e.sets.map((set, si) => si === setIdx ? next : set),
       });
-      const seconds = restAfterSet(updated, entryIdx, setIdx);
+      const rest = restDetailAfterSet(updated, entryIdx, setIdx);
       // Beating the same set of last time shows on the rest timer.
       const reference = exerciseComparisons(previousSessions, entry.exerciseId, session.routineId).preferred;
       const gain = setProgress(next, matchingSet(reference?.entry, setIdx), exMap[entry.exerciseId]?.type);
       const progress = gain ? { setNumber: setIdx + 1, gain, date: reference.session.date,
         exerciseName: exMap[entry.exerciseId]?.name || '' } : null;
-      if (seconds > 0) beginRest(seconds, supersetInfo(updated, entryIdx)
-        ? 'Superserie' : exMap[entry.exerciseId]?.name || '', progress);
+      // Mid-superset, the label says which exercise comes next.
+      const upcoming = rest.transition ? nextSupersetSet(updated, entryIdx) : null;
+      const label = upcoming ? `Cambio → ${exMap[updated[upcoming.entryIndex].exerciseId]?.name || ''}`
+        : supersetInfo(updated, entryIdx) ? 'Superserie' : exMap[entry.exerciseId]?.name || '';
+      if (rest.seconds > 0) beginRest(rest.seconds, label, progress);
     }
     return true;
   };
@@ -548,7 +552,7 @@ export function RestTimerWidget({ timer, notificationState, onEnableNotification
         <div role="status" className="rest-gain flex items-start gap-2 bg-lime-300/10 border-b border-lime-300/20 text-lime-300 text-xs font-semibold px-3 pt-3 pb-2">
           <ArrowUp className="w-3.5 h-3.5 shrink-0 mt-px" strokeWidth={3} />
           <span>
-            {timer.exerciseName === 'Superserie' && timer.progress.exerciseName ? `${timer.progress.exerciseName} · ` : ''}
+            {(timer.exerciseName === 'Superserie' || timer.exerciseName?.startsWith('Cambio')) && timer.progress.exerciseName ? `${timer.progress.exerciseName} · ` : ''}
             Serie {timer.progress.setNumber} mejor que el {formatShort(timer.progress.date)} · <span className="font-mono">{timer.progress.gain}</span>
           </span>
         </div>
@@ -660,12 +664,7 @@ export function ExerciseEntryCard({ entry, exercise, routineId, showGhost, previ
           className="text-[10px] uppercase tracking-wider font-bold px-2 py-1 rounded-full bg-zinc-800 text-zinc-300 hover:text-lime-300">
           Historial de series
         </button>
-        <button
-          onClick={() => setShowRestEdit(v => !v)}
-          className={`flex items-center gap-1 text-[10px] uppercase tracking-wider font-bold px-2 py-1 rounded-full transition ${entry.restSeconds > 0 ? 'bg-lime-300/15 text-lime-300' : 'bg-zinc-800 text-zinc-400 hover:text-zinc-200'}`}
-        >
-          <Timer className="w-3 h-3" /> {superset ? 'Entre rondas: ' : ''}{entry.restSeconds > 0 ? fmtDur(entry.restSeconds) : 'Descanso'}
-        </button>
+        <RestChip entry={entry} superset={superset} onClick={() => setShowRestEdit(v => !v)} />
         <button
           onClick={() => setShowNotes(v => !v)}
           className={`flex items-center gap-1 text-[10px] uppercase tracking-wider font-bold px-2 py-1 rounded-full transition ${entry.notes ? 'bg-lime-300/15 text-lime-300' : 'bg-zinc-800 text-zinc-400 hover:text-zinc-200'}`}
@@ -682,28 +681,7 @@ export function ExerciseEntryCard({ entry, exercise, routineId, showGhost, previ
         )}
       </div>
 
-      {showRestEdit && (
-        <div className="px-3 pt-2 flex items-center gap-2">
-          <span className="text-xs text-zinc-500 shrink-0">Descanso:</span>
-          <DurField
-            value={entry.restSeconds || 0}
-            onChange={v => onUpdateEntry({ restSeconds: v })}
-            placeholder="mm:ss"
-            className="bg-zinc-800 border border-zinc-700 rounded px-2 py-1 text-xs font-mono text-zinc-200 w-20 outline-none focus:border-lime-300/50 placeholder:text-zinc-500 text-center"
-          />
-          <div className="flex gap-1 ml-auto">
-            {[60, 90, 120, 180].map(sec => (
-              <button
-                key={sec}
-                onClick={() => onUpdateEntry({ restSeconds: sec })}
-                className="text-[10px] font-bold bg-zinc-800 hover:bg-zinc-700 text-zinc-300 px-2 py-1 rounded"
-              >
-                {sec / 60 < 1 ? `${sec}s` : `${sec / 60}m`}
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
+      {showRestEdit && <RestEditor entry={entry} superset={superset} onUpdate={onUpdateEntry} />}
 
       {entry.routineNote && (
         <p className="px-3 pt-2 text-[11px] text-zinc-500 italic whitespace-pre-wrap">Rutina: {entry.routineNote}</p>
@@ -986,6 +964,7 @@ export function SessionDetail({ session, exMap, onBack, onDelete, onEdit, onRepe
                   <div className="text-[10px] text-zinc-500 uppercase tracking-wide mt-0.5 flex items-center gap-2 flex-wrap">
                     <span>{MUSCLE_GROUPS[ex.muscleGroup] || ex.muscleGroup}</span>
                     {entry.restSeconds > 0 && <span className="flex items-center gap-1"><Timer className="w-3 h-3" /> {fmtDur(entry.restSeconds)}</span>}
+                    {entry.transitionSeconds > 0 && supersetInfo(session.entries, i) && <span>Cambio {fmtDur(entry.transitionSeconds)}</span>}
                   </div>
                 </div>
                 {entry.notes && (

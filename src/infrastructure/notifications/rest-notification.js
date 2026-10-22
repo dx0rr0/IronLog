@@ -20,7 +20,13 @@ const enqueue = operation => {
   return pending;
 };
 
+// The worker raises the end-of-rest alert while the app is in the background.
+const tellWorker = (serviceWorker, message) => {
+  try { serviceWorker?.active?.postMessage(message); } catch {}
+};
+
 const closeExisting = async serviceWorker => {
+  tellWorker(serviceWorker, { type: 'rest-cancel' });
   if (!serviceWorker?.getNotifications) return;
   const notifications = await serviceWorker.getNotifications({ tag: TAG });
   notifications.forEach(notification => notification.close());
@@ -65,6 +71,9 @@ export const showRestNotification = async (timer, requestPermission = false, ann
         ...(announce ? { renotify: true } : { silent: true }),
         data: { url: '/', endsAt: timer.endsAt },
       });
+      if (version === notificationVersion) {
+        tellWorker(worker, { type: 'rest-schedule', endsAt: timer.endsAt, exerciseName: timer.exerciseName || '' });
+      }
       return { status: version === notificationVersion ? 'shown' : 'cancelled' };
     });
   } catch (error) {

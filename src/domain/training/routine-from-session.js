@@ -42,6 +42,7 @@ export const routineDraftFromSession = (session, exMap) => ({
       exerciseId: entry.exerciseId,
       ...(entry.supersetId ? { supersetId: entry.supersetId } : {}),
       restSeconds: entry.restSeconds ?? DEFAULT_REST_SECONDS,
+      ...(entry.transitionSeconds > 0 ? { transitionSeconds: entry.transitionSeconds } : {}),
       notes: entry.notes || '',
       sets: sets.map(set => targetsFromSet(set, exercise)),
     }];

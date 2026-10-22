@@ -160,6 +160,7 @@ export default function App() {
             exerciseId: re.exerciseId,
             ...(re.supersetId ? { supersetId: re.supersetId } : {}),
             restSeconds: re.restSeconds ?? DEFAULT_REST_SECONDS,
+            ...(re.transitionSeconds > 0 ? { transitionSeconds: re.transitionSeconds } : {}),
             // Notes belong to the day; the routine's note is a read-only hint.
             notes: '',
             ...(re.notes ? { routineNote: re.notes } : {}),

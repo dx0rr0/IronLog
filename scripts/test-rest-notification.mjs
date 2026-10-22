@@ -9,7 +9,9 @@ const worker = {
     return [existing];
   },
   showNotification: async (title, options) => calls.push({ title, options }),
+  active: { postMessage: message => messages.push(message) },
 };
+const messages = [];
 Object.defineProperty(globalThis, 'navigator', {
   configurable: true, value: { serviceWorker: { ready: Promise.resolve(worker) } },
 });
@@ -28,11 +30,14 @@ assert.equal(calls[0].options.silent, undefined, 'new rests respect Android aler
 assert.equal(calls[0].options.renotify, true, 'each new rest may alert again');
 assert.equal(calls[0].options.requireInteraction, true);
 assert.equal(calls[0].options.data.endsAt, timer.endsAt);
+assert.deepEqual(messages.at(-1), { type: 'rest-schedule', endsAt: timer.endsAt, exerciseName: 'Press de banca' },
+  'the worker gets the deadline for the background alert');
 assert.equal((await showRestNotification(timer)).status, 'shown');
 assert.equal(calls[1].options.silent, true, 'restoring/updating a rest stays quiet');
 assert.equal(calls.filter(call => call === 'closed').length, 0, 'replacements do not close the old notification first');
 await closeRestNotification();
 assert.equal(calls[2], 'closed');
+assert.deepEqual(messages.at(-1), { type: 'rest-cancel' }, 'closing cancels the background alert');
 Notification.permission = 'denied';
 assert.equal((await showRestNotification(timer)).status, 'denied');
 Notification.permission = 'default';

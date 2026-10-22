@@ -12,6 +12,14 @@ App personal para registrar entrenamientos: rutinas, series con RIR, autorrellen
 
 Consulta [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) para las dependencias entre capas y el flujo de datos. `dist/` y `node_modules/` son archivos generados y no se versionan.
 
+## Cambios de la versión 1.11.0
+
+- Las superseries tienen dos descansos independientes: entre ejercicios (al terminar una serie y pasar al siguiente de la superserie) y entre rondas (al completar la ronda). Por defecto no hay pausa entre ejercicios, como hasta ahora.
+- Los descansos se eligen con selectores de un toque: entre ejercicios «Sin descanso», 30 s o 1 min; entre rondas 1, 1:30, 2 o 3 min. «⋯» deja escribir cualquier otro tiempo.
+- El final del descanso suena como la campana de un ring de boxeo: tres golpes metálicos que se oyen aunque haya música.
+- El temporizador del cambio indica el siguiente ejercicio («Cambio → Remo con barra»). Ambos descansos se configuran en la rutina o durante el entrenamiento y se conservan al repetir una sesión o guardarla como rutina.
+- Con la app en segundo plano, el final del descanso avisa con una notificación con sonido y vibración. Necesita tener las notificaciones de IronLog activadas. El aviso funciona en descansos de hasta unos 5 minutos, que es lo que Android deja vivo al proceso que lo programa.
+
 ## Cambios de la versión 1.10.0
 
 - El inicio reúne lo importante: empezar a entrenar, la meta semanal, la racha y un calendario del mes con los días entrenados. Tocar un día muestra sus entrenos. Desaparece la pestaña Calendario.

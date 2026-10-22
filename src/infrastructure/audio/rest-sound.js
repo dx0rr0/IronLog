@@ -28,24 +28,29 @@ export function unlockAudio() {
   } catch {}
 }
 
-// Three rising notes (A5 · C#6 · E6), soft attack and a short tail.
+// Boxing-ring bell: three quick metallic strikes (inharmonic partials with
+// short exponential tails) that cut through gym music.
+const STRIKES = [0, 0.26, 0.52];
+const PARTIALS = [[1, 0.45, 0.7], [1.5, 0.2, 0.5], [2.31, 0.14, 0.35], [3.1, 0.08, 0.25]];
+const BELL_HZ = 1180;
+
 function chime(audio, at) {
   const nodes = [];
-  [880, 1108.73, 1318.51].forEach((frequency, i) => {
-    const start = at + i * 0.16;
+  STRIKES.forEach(offset => PARTIALS.forEach(([ratio, level, decay]) => {
+    const start = at + offset;
     const osc = audio.createOscillator();
     const gain = audio.createGain();
     osc.type = 'sine';
-    osc.frequency.value = frequency;
+    osc.frequency.value = BELL_HZ * ratio;
     osc.connect(gain);
     gain.connect(audio.destination);
     gain.gain.setValueAtTime?.(0.0001, start);
-    gain.gain.exponentialRampToValueAtTime?.(0.35, start + 0.02);
-    gain.gain.exponentialRampToValueAtTime?.(0.0001, start + (i === 2 ? 0.9 : 0.45));
+    gain.gain.exponentialRampToValueAtTime?.(level, start + 0.004);
+    gain.gain.exponentialRampToValueAtTime?.(0.0001, start + decay);
     osc.start(start);
-    osc.stop(start + 1);
+    osc.stop(start + decay + 0.05);
     nodes.push(osc);
-  });
+  }));
   return nodes;
 }
 

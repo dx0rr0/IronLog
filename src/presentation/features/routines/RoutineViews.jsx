@@ -1,13 +1,12 @@
 import { DEFAULT_REST_SECONDS } from '../../../domain/training/training-defaults.js';
-import { DurField } from '../../shared/DurField.jsx';
 import React from 'react';
-import { ArrowLeftRight, ClipboardList, Copy, MessageSquare, Pencil, Play, Plus, Save, Timer, Trash2, X } from 'lucide-react';
+import { ArrowLeftRight, ClipboardList, Copy, MessageSquare, Pencil, Play, Plus, Save, Trash2, X } from 'lucide-react';
 import { useState } from 'react';
 import { MUSCLE_GROUPS, availableRoutineEntries } from '../../../domain/exercises/catalog.js';
 import { ExercisePicker } from '../../shared/ExercisePicker.jsx';
 import { NewExerciseForm } from '../exercises/ExerciseViews.jsx';
-import { fmtDur } from '../../shared/formatters.js';
 import { SupersetControls } from '../../shared/SupersetControls.jsx';
+import { RestChip, RestEditor } from '../../shared/RestSettings.jsx';
 import { useBackGuard, useBackLayer } from '../../shared/BrowserNavigation.jsx';
 import { joinSuperset, splitSuperset, moveTrainingEntry, moveTrainingBlock, normalizeSupersets, supersetInfo, trainingBlocks, updateTrainingEntry } from '../../../domain/training/supersets.js';
 import { DragHandle, useDragReorder } from '../../shared/DragReorder.jsx';
@@ -376,12 +375,7 @@ export function RoutineExerciseEditor({ re, ex, isFirst, isLast, superset, super
 
       {supersetControls}
       <div className="flex items-center gap-1 px-3 pt-3 flex-wrap">
-        <button
-          onClick={() => setShowRest(v => !v)}
-          className={`flex items-center gap-1 text-[10px] uppercase tracking-wider font-bold px-2 py-1 rounded-full transition ${re.restSeconds > 0 ? 'bg-lime-300/15 text-lime-300' : 'bg-zinc-800 text-zinc-400 hover:text-zinc-200'}`}
-        >
-          <Timer className="w-3 h-3" /> {superset ? 'Entre rondas: ' : ''}{re.restSeconds > 0 ? fmtDur(re.restSeconds) : 'Descanso'}
-        </button>
+        <RestChip entry={re} superset={superset} onClick={() => setShowRest(v => !v)} />
         <button
           onClick={() => setShowNotes(v => !v)}
           className={`flex items-center gap-1 text-[10px] uppercase tracking-wider font-bold px-2 py-1 rounded-full transition ${re.notes ? 'bg-lime-300/15 text-lime-300' : 'bg-zinc-800 text-zinc-400 hover:text-zinc-200'}`}
@@ -390,28 +384,7 @@ export function RoutineExerciseEditor({ re, ex, isFirst, isLast, superset, super
         </button>
       </div>
 
-      {showRest && (
-        <div className="px-3 pt-2 flex items-center gap-2">
-          <span className="text-xs text-zinc-500 shrink-0">Descanso:</span>
-          <DurField
-            value={re.restSeconds || 0}
-            onChange={v => onUpdate({ restSeconds: v })}
-            placeholder="mm:ss"
-            className="bg-zinc-800 border border-zinc-700 rounded px-2 py-1 text-xs font-mono text-zinc-200 w-20 outline-none focus:border-lime-300/50 placeholder:text-zinc-500 text-center"
-          />
-          <div className="flex gap-1 ml-auto">
-            {[60, 90, 120, 180].map(sec => (
-              <button
-                key={sec}
-                onClick={() => onUpdate({ restSeconds: sec })}
-                className="text-[10px] font-bold bg-zinc-800 hover:bg-zinc-700 text-zinc-300 px-2 py-1 rounded"
-              >
-                {sec / 60 < 1 ? `${sec}s` : `${sec / 60}m`}
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
+      {showRest && <RestEditor entry={re} superset={superset} onUpdate={onUpdate} />}
 
       {showNotes && (
         <div className="px-3 pt-2">

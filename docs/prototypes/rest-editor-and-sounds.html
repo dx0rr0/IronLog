@@ -1,0 +1,335 @@
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>IronLog Rest Prototypes</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Anton&family=Outfit:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: phone-sized mock cards in a wrapping grid, then a list of playable sounds.
+   Single dark look on purpose: it mirrors the app, which is dark-only. */
+:root {
+  color-scheme: dark;
+  --bg: #09090b;
+  --panel: #18181b;
+  --raised: #27272a;
+  --line: #2f2f35;
+  --fg: #f4f4f5;
+  --muted: #a1a1aa;
+  --faint: #71717a;
+  --lime: #d4ff37;
+  --lime-soft: rgba(212, 255, 55, .14);
+  --ink: #09090b;
+  --display: 'Anton', Impact, 'Arial Narrow', sans-serif;
+  --body: 'Outfit', system-ui, sans-serif;
+  --mono: 'JetBrains Mono', ui-monospace, Menlo, monospace;
+}
+* { box-sizing: border-box; }
+body {
+  background: var(--bg); color: var(--fg); font-family: var(--body);
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 32px 64px;
+}
+.wrap { max-width: 1180px; margin: 0 auto; display: grid; grid-template-columns: minmax(0, 1fr); gap: 40px; }
+.wrap > * { min-width: 0; }
+header h1 { font-family: var(--display); font-weight: 400; font-size: clamp(36px, 7vw, 56px); line-height: .95; margin: 6px 0 10px; text-wrap: balance; }
+.eyebrow { font-size: 11px; letter-spacing: .3em; color: var(--faint); font-weight: 700; }
+header p { color: var(--muted); max-width: 62ch; margin: 0; line-height: 1.5; }
+h2 { font-family: var(--display); font-weight: 400; font-size: 28px; margin: 0 0 4px; letter-spacing: .01em; }
+.section-intro { color: var(--muted); margin: 0 0 20px; max-width: 62ch; line-height: 1.5; }
+
+.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(320px, 100%), 1fr)); gap: 24px; align-items: start; }
+.option { display: grid; gap: 12px; min-width: 0; }
+.option-head { display: flex; gap: 10px; align-items: baseline; }
+.letter { font-family: var(--display); font-size: 30px; color: var(--lime); line-height: 1; }
+.option-head h3 { margin: 0; font-size: 16px; font-weight: 700; }
+.option-head p { margin: 2px 0 0; color: var(--muted); font-size: 13px; line-height: 1.4; }
+
+/* Phone mock */
+.phone { position: relative; background: var(--bg); border: 1px solid var(--line); border-radius: 28px; padding: 14px; overflow: hidden; min-height: 470px; }
+.card { background: var(--panel); border: 1px solid var(--raised); border-radius: 18px; overflow: hidden; }
+.card-top { padding: 14px 14px 12px; border-bottom: 1px solid var(--raised); }
+.ex-name { font-family: var(--display); font-size: 21px; line-height: 1.05; }
+.ex-meta { font-size: 10px; color: var(--faint); letter-spacing: .08em; text-transform: uppercase; margin-top: 2px; }
+.badge { font-size: 10px; font-weight: 800; color: var(--lime); letter-spacing: .05em; padding: 12px 14px 0; }
+.toolbar { display: flex; flex-wrap: wrap; gap: 6px; padding: 10px 12px 0; align-items: center; }
+.chip { font: 700 10px/1 var(--body); letter-spacing: .08em; text-transform: uppercase; border: 0; border-radius: 999px; padding: 7px 10px; background: var(--raised); color: var(--muted); cursor: pointer; display: inline-flex; gap: 6px; align-items: center; }
+.chip.on { background: var(--lime-soft); color: var(--lime); }
+.chip svg { width: 12px; height: 12px; }
+.sets { padding: 12px 12px 14px; display: grid; gap: 8px; }
+.set { display: grid; grid-template-columns: 18px 1fr 1fr 44px; gap: 6px; align-items: center; }
+.set span { color: var(--faint); font: 12px var(--mono); text-align: center; }
+.cell { background: var(--raised); border-radius: 8px; height: 38px; display: grid; place-items: center; font: 600 14px var(--mono); }
+.check { background: var(--raised); border-radius: 8px; height: 38px; display: grid; place-items: center; color: var(--faint); }
+button:focus-visible, input:focus-visible { outline: 2px solid var(--lime); outline-offset: 2px; }
+.mono { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+
+/* A — steppers */
+.steps { padding: 10px 12px 0; display: grid; gap: 6px; }
+.step-row { display: flex; align-items: center; gap: 8px; background: var(--bg); border: 1px solid var(--raised); border-radius: 12px; padding: 6px 6px 6px 12px; }
+.step-row .lbl { font-size: 10px; font-weight: 800; letter-spacing: .1em; color: var(--muted); text-transform: uppercase; flex: 1; }
+.step-btn { width: 30px; height: 30px; border-radius: 9px; border: 0; background: var(--raised); color: var(--fg); font: 700 16px var(--body); cursor: pointer; }
+.step-val { width: 52px; text-align: center; font: 600 14px var(--mono); }
+.step-val.zero { color: var(--faint); font-size: 11px; font-family: var(--body); font-weight: 700; }
+
+/* B — segmented */
+.seg-block { padding: 10px 12px 0; display: grid; gap: 8px; }
+.seg-label { font-size: 10px; font-weight: 800; letter-spacing: .1em; color: var(--faint); text-transform: uppercase; margin-bottom: 4px; display: flex; justify-content: space-between; }
+.seg-label b { color: var(--fg); font-family: var(--mono); letter-spacing: 0; font-weight: 600; }
+.seg { display: flex; background: var(--bg); border: 1px solid var(--raised); border-radius: 10px; padding: 3px; gap: 2px; }
+.seg button { flex: 1; border: 0; background: transparent; color: var(--muted); font: 700 11px var(--body); padding: 7px 0; border-radius: 7px; cursor: pointer; white-space: nowrap; }
+.seg button.on { background: var(--lime); color: var(--ink); }
+.seg input { width: 100%; border: 0; background: transparent; color: var(--fg); font: 600 12px var(--mono); text-align: center; outline: none; }
+
+/* C — bottom sheet */
+.scrim { position: absolute; inset: 0; background: rgba(9,9,11,.72); backdrop-filter: blur(3px); display: flex; align-items: flex-end; }
+.sheet { width: 100%; background: var(--panel); border-top: 1px solid var(--line); border-radius: 22px 22px 0 0; padding: 10px 16px 16px; display: grid; gap: 14px; animation: rise .22s ease-out; }
+@keyframes rise { from { transform: translateY(24px); opacity: 0; } }
+.grabber { width: 36px; height: 4px; border-radius: 4px; background: var(--raised); margin: 0 auto; }
+.sheet h4 { margin: 0; font-family: var(--display); font-weight: 400; font-size: 20px; }
+.dials { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.dial { background: var(--bg); border: 1px solid var(--raised); border-radius: 14px; padding: 10px; display: grid; gap: 8px; justify-items: center; }
+.dial .lbl { font-size: 10px; font-weight: 800; letter-spacing: .1em; color: var(--faint); text-transform: uppercase; }
+.dial .big { font: 600 26px var(--mono); }
+.dial .big.zero { font: 700 14px var(--body); color: var(--muted); height: 34px; display: grid; place-items: center; }
+.dial .row { display: flex; gap: 6px; }
+.dial .pills { display: flex; flex-wrap: wrap; gap: 4px; justify-content: center; }
+.pill { border: 0; border-radius: 999px; background: var(--raised); color: var(--muted); font: 700 10px var(--body); padding: 5px 8px; cursor: pointer; }
+.pill.on { background: var(--lime-soft); color: var(--lime); }
+.done { border: 0; border-radius: 999px; background: var(--lime); color: var(--ink); font: 800 13px var(--body); padding: 12px; cursor: pointer; letter-spacing: .04em; }
+
+/* D — split chip + popover */
+.split { display: inline-flex; border-radius: 999px; background: var(--lime-soft); overflow: hidden; }
+.split button { border: 0; background: transparent; color: var(--lime); font: 700 10px var(--body); letter-spacing: .06em; text-transform: uppercase; padding: 7px 10px; display: inline-flex; gap: 5px; align-items: center; cursor: pointer; }
+.split button + button { border-left: 1px solid rgba(212,255,55,.25); }
+.split button.active { background: var(--lime); color: var(--ink); }
+.split svg { width: 12px; height: 12px; }
+.pop { margin: 8px 12px 0; background: var(--bg); border: 1px solid var(--raised); border-radius: 12px; padding: 8px; display: grid; gap: 6px; }
+.pop .hint { font-size: 10px; color: var(--faint); font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
+.pop .pills { display: flex; gap: 4px; flex-wrap: wrap; }
+
+/* Sounds */
+.sounds { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(260px, 100%), 1fr)); gap: 12px; }
+.sound { background: var(--panel); border: 1px solid var(--raised); border-radius: 16px; padding: 14px; display: grid; grid-template-columns: 1fr auto; gap: 4px 12px; align-items: center; min-width: 0; }
+.sound.ref { border-style: dashed; }
+.sound h3 { margin: 0; font-size: 15px; font-weight: 700; display: flex; gap: 8px; align-items: center; }
+.sound .tag { font-size: 9px; letter-spacing: .1em; text-transform: uppercase; color: var(--faint); border: 1px solid var(--line); border-radius: 999px; padding: 2px 6px; font-weight: 700; }
+.sound p { margin: 0; color: var(--muted); font-size: 13px; line-height: 1.4; grid-column: 1; }
+.sound .play { grid-row: 1 / span 2; grid-column: 2; width: 46px; height: 46px; border-radius: 50%; border: 0; background: var(--lime); color: var(--ink); cursor: pointer; display: grid; place-items: center; }
+.sound .play svg { width: 18px; height: 18px; }
+.sound.playing .play { background: var(--fg); }
+.note { color: var(--faint); font-size: 12px; margin-top: 12px; }
+@media (prefers-reduced-motion: reduce) { .sheet { animation: none; } }
+</style>
+
+<div class="wrap">
+  <header>
+    <div class="eyebrow">IRONLOG · PROTOTIPOS</div>
+    <h1>DESCANSOS Y SONIDO</h1>
+    <p>Cuatro formas de editar los dos descansos de una superserie sin que el menú ocupe media tarjeta, y siete sonidos para el final del descanso. Todo es interactivo: toca los controles y reproduce los sonidos.</p>
+  </header>
+
+  <section>
+    <h2>EDITOR DE DESCANSOS</h2>
+    <p class="section-intro">Cada maqueta es la tarjeta de un ejercicio en superserie, al ancho de un móvil. Los valores de ejemplo son 15 s entre ejercicios y 2:00 entre rondas.</p>
+    <div class="grid" id="options"></div>
+  </section>
+
+  <section>
+    <h2>SONIDO AL ACABAR</h2>
+    <p class="section-intro">Sonidos generados en el propio móvil, sin descargar audio. Súbele volumen al multimedia para oírlos como en el gimnasio.</p>
+    <div class="sounds" id="sounds"></div>
+    <p class="note">«Cuenta atrás» empieza a sonar 3 segundos antes de que acabe el descanso; aquí lo oyes completo.</p>
+  </section>
+</div>
+
+<script>
+const ICON = {
+  timer: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l2 2M10 2h4"/></svg>',
+  swap: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M16 3l4 4-4 4M20 7H4M8 21l-4-4 4-4M4 17h16"/></svg>',
+  play: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M7 4.5v15l13-7.5z"/></svg>',
+  stop: '<svg viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>',
+  check: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5L20 7"/></svg>',
+};
+const fmt = s => s === 0 ? 'Sin pausa' : `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+const short = s => s === 0 ? 'Sin pausa' : s < 60 ? `${s}s` : s % 60 ? `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}` : `${s / 60}m`;
+const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+const CHANGE = [0, 15, 30, 45];
+const ROUND = [60, 90, 120, 180];
+
+const cardTop = () => `
+  <div class="card-top"><div class="ex-name">PRESS DE BANCA</div><div class="ex-meta">Pecho · Barra</div></div>
+  <div class="badge">SUPERSERIE 1 · 1/2 · siguiente: Remo con barra</div>`;
+const sets = () => `<div class="sets">${[1, 2].map(n => `
+  <div class="set"><span>${n}</span><div class="cell">80</div><div class="cell">8</div><div class="check">${ICON.check}</div></div>`).join('')}</div>`;
+const summaryChip = (s, open) => `<button class="chip on" data-act="toggle" aria-expanded="${open}">${ICON.timer} Ronda ${fmt(s.round)}${s.change ? ` · ${ICON.swap} ${short(s.change)}` : ''}</button>`;
+const notes = '<button class="chip">Notas</button>';
+
+const OPTIONS = [
+  {
+    id: 'a', title: 'Dos filas con − / +',
+    text: 'Se despliega bajo los botones: una fila por descanso, pasos de 15 s. Ocupa unos 80 px.',
+    state: { change: 15, round: 120, open: true },
+    render(s) {
+      const row = (key, label, step) => `
+        <div class="step-row"><span class="lbl">${label}</span>
+          <button class="step-btn" data-act="dec" data-key="${key}" aria-label="Menos ${label}">−</button>
+          <span class="step-val ${s[key] ? 'mono' : 'zero'}">${fmt(s[key])}</span>
+          <button class="step-btn" data-act="inc" data-key="${key}" aria-label="Más ${label}">+</button></div>`;
+      return `${cardTop()}<div class="toolbar">${summaryChip(s, s.open)}${notes}</div>
+        ${s.open ? `<div class="steps">${row('change', 'Entre ejercicios')}${row('round', 'Entre rondas')}</div>` : ''}${sets()}`;
+    },
+  },
+  {
+    id: 'b', title: 'Selectores de un toque',
+    text: 'Dos barras segmentadas con los valores más usados. «⋯» permite escribir otro tiempo.',
+    state: { change: 15, round: 120, open: true, custom: null },
+    render(s) {
+      const seg = (key, label, values) => {
+        const known = values.includes(s[key]);
+        return `<div><div class="seg-label">${label}<b>${fmt(s[key])}</b></div><div class="seg" role="group" aria-label="${label}">
+          ${values.map(v => `<button class="${s[key] === v ? 'on' : ''}" data-act="set" data-key="${key}" data-v="${v}">${short(v)}</button>`).join('')}
+          ${s.custom === key
+            ? `<input id="custom-${key}" aria-label="Otro tiempo" placeholder="m:ss" data-key="${key}" autofocus>`
+            : `<button class="${known ? '' : 'on'}" data-act="custom" data-key="${key}" aria-label="Otro tiempo">${known ? '⋯' : short(s[key])}</button>`}
+        </div></div>`;
+      };
+      return `${cardTop()}<div class="toolbar">${summaryChip(s, s.open)}${notes}</div>
+        ${s.open ? `<div class="seg-block">${seg('change', 'Entre ejercicios', CHANGE)}${seg('round', 'Entre rondas', ROUND)}</div>` : ''}${sets()}`;
+    },
+  },
+  {
+    id: 'c', title: 'Hoja inferior',
+    text: 'La tarjeta no crece nunca. El botón abre una hoja desde abajo con los dos tiempos en grande.',
+    state: { change: 15, round: 120, open: true },
+    render(s) {
+      const dial = (key, label, values) => `
+        <div class="dial"><span class="lbl">${label}</span>
+          <span class="big ${s[key] ? '' : 'zero'}">${fmt(s[key])}</span>
+          <div class="row"><button class="step-btn" data-act="dec" data-key="${key}" aria-label="Menos ${label}">−</button><button class="step-btn" data-act="inc" data-key="${key}" aria-label="Más ${label}">+</button></div>
+          <div class="pills">${values.map(v => `<button class="pill ${s[key] === v ? 'on' : ''}" data-act="set" data-key="${key}" data-v="${v}">${short(v)}</button>`).join('')}</div>
+        </div>`;
+      return `${cardTop()}<div class="toolbar">${summaryChip(s, s.open)}${notes}</div>${sets()}
+        ${s.open ? `<div class="scrim" data-act="close"><div class="sheet" role="dialog" aria-label="Descansos de la superserie">
+          <div class="grabber"></div><h4>DESCANSOS · SUPERSERIE 1</h4>
+          <div class="dials">${dial('change', 'Entre ejercicios', CHANGE)}${dial('round', 'Entre rondas', ROUND)}</div>
+          <button class="done" data-act="toggle">LISTO</button></div></div>` : ''}`;
+    },
+  },
+  {
+    id: 'd', title: 'Botón partido',
+    text: 'El propio botón muestra los dos tiempos. Tocas el que quieres cambiar y sale solo su fila.',
+    state: { change: 15, round: 120, active: 'change' },
+    render(s) {
+      const values = s.active === 'change' ? CHANGE : ROUND;
+      return `${cardTop()}<div class="toolbar"><div class="split">
+          <button class="${s.active === 'round' ? 'active' : ''}" data-act="pick" data-key="round" aria-label="Descanso entre rondas">${ICON.timer} ${fmt(s.round)}</button>
+          <button class="${s.active === 'change' ? 'active' : ''}" data-act="pick" data-key="change" aria-label="Descanso entre ejercicios">${ICON.swap} ${short(s.change)}</button>
+        </div>${notes}</div>
+        ${s.active ? `<div class="pop"><span class="hint">${s.active === 'change' ? 'Entre ejercicios' : 'Entre rondas'}</span>
+          <div class="pills">
+            <button class="step-btn" data-act="dec" data-key="${s.active}" aria-label="Menos">−</button>
+            ${values.map(v => `<button class="pill ${s[s.active] === v ? 'on' : ''}" data-act="set" data-key="${s.active}" data-v="${v}">${short(v)}</button>`).join('')}
+            <button class="step-btn" data-act="inc" data-key="${s.active}" aria-label="Más">+</button>
+          </div></div>` : ''}${sets()}`;
+    },
+  },
+];
+
+const host = document.getElementById('options');
+OPTIONS.forEach(opt => {
+  const el = document.createElement('article');
+  el.className = 'option';
+  el.innerHTML = `<div class="option-head"><span class="letter">${opt.id.toUpperCase()}</span><div><h3>${opt.title}</h3><p>${opt.text}</p></div></div>
+    <div class="phone"><div class="card"></div></div>`;
+  host.appendChild(el);
+  const phone = el.querySelector('.phone');
+  const draw = () => {
+    const html = opt.render(opt.state);
+    // The sheet sits over the whole phone, outside the card.
+    const [cardHtml, sheetHtml] = html.includes('class="scrim"') ? [html.slice(0, html.indexOf('<div class="scrim"')), html.slice(html.indexOf('<div class="scrim"'))] : [html, ''];
+    phone.innerHTML = `<div class="card">${cardHtml}</div>${sheetHtml}`;
+    phone.querySelector('input')?.focus();
+  };
+  phone.addEventListener('click', e => {
+    const t = e.target.closest('[data-act]');
+    if (!t) return;
+    const s = opt.state, key = t.dataset.key;
+    if (t.dataset.act === 'close' && e.target !== t) return;
+    if (t.dataset.act === 'toggle' || t.dataset.act === 'close') s.open = !s.open;
+    if (t.dataset.act === 'inc') s[key] = clamp(s[key] + 15, 0, 600);
+    if (t.dataset.act === 'dec') s[key] = clamp(s[key] - 15, key === 'round' ? 15 : 0, 600);
+    if (t.dataset.act === 'set') { s[key] = Number(t.dataset.v); s.custom = null; }
+    if (t.dataset.act === 'custom') s.custom = key;
+    if (t.dataset.act === 'pick') s.active = s.active === key ? null : key;
+    draw();
+  });
+  phone.addEventListener('keydown', e => {
+    if (e.target.tagName !== 'INPUT' || e.key !== 'Enter') return;
+    const [m, sec] = e.target.value.includes(':') ? e.target.value.split(':').map(Number) : [0, Number(e.target.value)];
+    const total = (m || 0) * 60 + (sec || 0);
+    if (total >= 0 && total <= 600) opt.state[e.target.dataset.key] = total;
+    opt.state.custom = null; draw();
+  });
+  draw();
+});
+
+// ---------- Sounds ----------
+let ctx = null;
+const audio = () => (ctx ||= new (window.AudioContext || window.webkitAudioContext)());
+let active = [];
+const stopAll = () => { active.forEach(n => { try { n.stop(); } catch {} }); active = []; };
+
+// One partial: oscillator through an exponential envelope.
+function partial(a, out, { f, t, dur, gain, type = 'sine', attack = 0.004, bend }) {
+  const o = a.createOscillator(), g = a.createGain();
+  o.type = type; o.frequency.setValueAtTime(f, t);
+  if (bend) o.frequency.exponentialRampToValueAtTime(bend, t + dur);
+  g.gain.setValueAtTime(0.0001, t);
+  g.gain.exponentialRampToValueAtTime(gain, t + attack);
+  g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+  o.connect(g); g.connect(out); o.start(t); o.stop(t + dur + 0.05); active.push(o);
+}
+function bus(a, { lowpass } = {}) {
+  const master = a.createGain(); master.gain.value = 0.9;
+  if (lowpass) { const f = a.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = lowpass; master.connect(f); f.connect(a.destination); }
+  else master.connect(a.destination);
+  return master;
+}
+const SOUNDS = [
+  { id: 'actual', name: 'Actual', tag: 'referencia', text: 'Tres notas suaves ascendentes. Lo que suena hoy.', len: 1.3,
+    play(a, t) { const o = bus(a); [880, 1108.73, 1318.51].forEach((f, i) => partial(a, o, { f, t: t + i * 0.16, dur: i === 2 ? 0.9 : 0.45, gain: 0.3, attack: 0.02 })); } },
+  { id: 'campana', name: 'Campana', text: 'Un golpe de campana metálica con cola larga. Claro y nada estridente.', len: 2.2,
+    play(a, t) { const o = bus(a); [[1, .5, 2.2], [2.76, .22, 1.4], [5.4, .1, .8], [8.93, .05, .4]].forEach(([r, g, d]) => partial(a, o, { f: 660 * r, t, dur: d, gain: g })); } },
+  { id: 'ring', name: 'Ring de boxeo', text: 'Tres campanazos rápidos, como el final de un asalto. Se oye con música.', len: 1.6,
+    play(a, t) { const o = bus(a); [0, .26, .52].forEach(off => [[1, .45, .7], [1.5, .2, .5], [2.31, .14, .35], [3.1, .08, .25]].forEach(([r, g, d]) => partial(a, o, { f: 1180 * r, t: t + off, dur: d, gain: g }))); } },
+  { id: 'bips', name: 'Cronómetro', text: 'Dos bips cortos y uno largo, como el reloj de un box de crossfit.', len: 1.1,
+    play(a, t) { const o = bus(a, { lowpass: 3200 }); [[0, 1000, .11], [.2, 1000, .11], [.42, 1500, .45]].forEach(([off, f, d]) => partial(a, o, { f, t: t + off, dur: d, gain: .22, type: 'square', attack: .003 })); } },
+  { id: 'marimba', name: 'Marimba', text: 'Cuatro notas de madera, alegres y cortas. Muy reconocible.', len: 1.2,
+    play(a, t) { const o = bus(a); [523.25, 659.25, 783.99, 1046.5].forEach((f, i) => { partial(a, o, { f, t: t + i * .11, dur: .55, gain: .38 }); partial(a, o, { f: f * 3.93, t: t + i * .11, dur: .12, gain: .08 }); }); } },
+  { id: 'cuenco', name: 'Cuenco', text: 'Un tono grave que vibra y se apaga despacio. El más tranquilo.', len: 3.2,
+    play(a, t) { const o = bus(a); partial(a, o, { f: 392, t, dur: 3.1, gain: .32, attack: .01 }); partial(a, o, { f: 395.2, t, dur: 3.1, gain: .26, attack: .01 }); partial(a, o, { f: 392 * 2.71, t, dur: 1.4, gain: .08 }); } },
+  { id: 'cuenta', name: 'Cuenta atrás', text: 'Tres avisos en los últimos 3 segundos y un tono final. Te da tiempo a colocarte.', len: 3.8,
+    play(a, t) { const o = bus(a, { lowpass: 4000 }); [0, 1, 2].forEach(i => partial(a, o, { f: 784, t: t + i, dur: .09, gain: .25, type: 'triangle' })); partial(a, o, { f: 1175, t: t + 3, dur: .7, gain: .3, type: 'triangle', attack: .005 }); partial(a, o, { f: 1568, t: t + 3, dur: .5, gain: .1 }); } },
+];
+
+const sHost = document.getElementById('sounds');
+let timer = null;
+SOUNDS.forEach(snd => {
+  const el = document.createElement('article');
+  el.className = 'sound' + (snd.id === 'actual' ? ' ref' : '');
+  el.innerHTML = `<h3>${snd.name}${snd.tag ? `<span class="tag">${snd.tag}</span>` : ''}</h3><p>${snd.text}</p>
+    <button class="play" id="play-${snd.id}" aria-label="Reproducir ${snd.name}">${ICON.play}</button>`;
+  sHost.appendChild(el);
+  el.querySelector('.play').addEventListener('click', async () => {
+    const wasPlaying = el.classList.contains('playing');
+    stopAll(); clearTimeout(timer);
+    document.querySelectorAll('.sound.playing').forEach(n => { n.classList.remove('playing'); n.querySelector('.play').innerHTML = ICON.play; });
+    if (wasPlaying) return;
+    const a = audio(); if (a.state === 'suspended') await a.resume();
+    snd.play(a, a.currentTime + 0.03);
+    el.classList.add('playing'); el.querySelector('.play').innerHTML = ICON.stop;
+    timer = setTimeout(() => { el.classList.remove('playing'); el.querySelector('.play').innerHTML = ICON.play; }, snd.len * 1000);
+  });
+});
+</script>

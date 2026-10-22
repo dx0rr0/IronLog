@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { joinSuperset, splitSuperset, moveTrainingEntry, normalizeSupersets,
-  supersetInfo, updateTrainingEntry, restAfterSet, nextSupersetSet, trainingBlocks, moveTrainingBlock } from '../src/domain/training/supersets.js';
+  supersetInfo, updateTrainingEntry, restAfterSet, restDetailAfterSet, nextSupersetSet, trainingBlocks, moveTrainingBlock } from '../src/domain/training/supersets.js';
 import { repeatSession } from '../src/domain/training/workout-intelligence.js';
 import { routineDraftFromSession } from '../src/domain/training/routine-from-session.js';
 import { sessionVolume } from '../src/domain/training/session-utils.js';
@@ -67,4 +67,30 @@ assert.equal(missing.entries[0].supersetId, undefined);
 await storage.set('superset-test', { source, draft, repeated });
 assert.deepEqual(await storage.get('superset-test'), { source, draft, repeated });
 assert.equal(JSON.parse(JSON.stringify(source)).entries[1].supersetId, 'ss-1');
+// Transition rest: independent from the round rest, shared by the group.
+{
+  let pair = joinSuperset([entry('a', 2, 120), entry('b', 2, 120)], 0, 'tr');
+  assert.equal(supersetInfo(pair, 0).transitionSeconds, 0, 'no transition rest by default');
+  pair = updateTrainingEntry(pair, 1, { transitionSeconds: 20 });
+  assert.deepEqual(pair.map(e => e.transitionSeconds), [20, 20], 'transition shared by the group');
+  assert.deepEqual(pair.map(e => e.restSeconds), [120, 120], 'round rest untouched');
+  pair[0].sets[0].done = true;
+  assert.deepEqual(restDetailAfterSet(pair, 0, 0), { seconds: 20, transition: true }, 'mid-round uses transition');
+  pair[1].sets[0].done = true;
+  assert.deepEqual(restDetailAfterSet(pair, 1, 0), { seconds: 120, transition: false }, 'round end uses round rest');
+  const trio = updateTrainingEntry(joinSuperset(joinSuperset([entry('a'), entry('b'), entry('c')], 0, 't3'), 1, 't3'), 0, { transitionSeconds: 15 });
+  trio[0].sets[0].done = true; trio[1].sets[0].done = true;
+  assert.equal(restAfterSet(trio, 1, 0), 15, 'every intermediate step rests');
+  trio[2].sets[0].done = true;
+  assert.equal(restAfterSet(trio, 2, 0), 60);
+  assert.deepEqual(updateTrainingEntry(pair, 0, { transitionSeconds: 0 }).map(e => 'transitionSeconds' in e), [false, false]);
+  assert.ok(!splitSuperset(pair, 0).some(e => 'transitionSeconds' in e), 'splitting clears transition');
+  const joined = joinSuperset([{ ...entry('x'), transitionSeconds: 30 }, entry('y')], 0, 'j');
+  assert.deepEqual(joined.map(e => e.transitionSeconds), [30, 30]);
+  assert.deepEqual(normalizeSupersets([{ ...pair[0] }, { ...pair[1], transitionSeconds: 99 }]).map(e => e.transitionSeconds), [20, 20],
+    'the first member owns the value');
+  const kept = { id: 'tr-src', entries: pair };
+  assert.deepEqual(repeatSession(kept, exMap, 1).entries.map(e => e.transitionSeconds), [20, 20], 'repeat keeps transition');
+  assert.deepEqual(routineDraftFromSession(kept, exMap).exercises.map(e => e.transitionSeconds), [20, 20], 'routine keeps transition');
+}
 console.log('Superset rounds, ordering, compatibility, templates and persistence checks passed');
